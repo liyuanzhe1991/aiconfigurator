@@ -4,8 +4,8 @@
 """
 Profile MLA prefill and decode for BF16/FP8 KV cache with NVTX annotations.
 
-Uses the same flow as collect_mla.py (create_attention + benchmark_with_power)
-for accurate kernel-level profiling of DeepSeek MLA attention.
+Mirrors collect_mla_1_1rc2.py (the actual collector for TRT-LLM >= 1.1.0)
+so that the kernel code-path is identical to what runs in production.
 
 Usage:
     nsys profile \\
@@ -22,33 +22,74 @@ NVTX markers in the report:
     PROFILE_context_bf16       -- Prefill, BF16 KV cache
     PROFILE_context_fp8        -- Prefill, FP8 KV cache
     PROFILE_generation_bf16    -- Decode,  BF16 KV cache
-    PROFILE_generation_fp8     -- Decode,  FP8 KV cache (FP8 attention compute)
+    PROFILE_generation_fp8     -- Decode,  FP8 KV cache
 """
+
+import math
 
 import torch
 
 import tensorrt_llm
-from tensorrt_llm._torch.attention_backend import AttentionInputType, TrtllmAttentionMetadata
 from tensorrt_llm._torch.attention_backend.interface import (
-    AttentionRuntimeFeatures,
+    AttentionInputType,
+    MLAParams,
     PositionalEmbeddingParams,
     RopeParams,
 )
-from tensorrt_llm._torch.attention_backend.utils import create_attention
+from tensorrt_llm._torch.attention_backend.utils import get_attention_backend
 from tensorrt_llm._torch.metadata import KVCacheParams
+from tensorrt_llm._torch.pyexecutor.llm_request import LlmRequest, SamplingConfig
 from tensorrt_llm._torch.pyexecutor.resource_manager import KVCacheManager
-from tensorrt_llm.functional import PositionEmbeddingType, RotaryScalingType
-from tensorrt_llm.llmapi import KvCacheConfig
+from tensorrt_llm.bindings.executor import KvCacheConfig
+from tensorrt_llm.functional import PositionEmbeddingType
 from tensorrt_llm.mapping import Mapping
-from tensorrt_llm.models.modeling_utils import QuantConfig, QuantAlgo
+from tensorrt_llm.models.modeling_utils import QuantConfig
+from tensorrt_llm.quantization.mode import QuantAlgo
+from tensorrt_llm.sampling_params import SamplingParams
 
-# ── DeepSeek V3 MLA constants ───────────────────────────────────────────────
+from helper import benchmark_with_power
+
+
+# ── DeepSeek V3 MLA constants (matches collect_mla_1_1rc2.py Scenario) ──────
 Q_LORA_RANK = 1536
 KV_LORA_RANK = 512
 QK_NOPE_HEAD_DIM = 128
 QK_ROPE_HEAD_DIM = 64
 V_HEAD_DIM = 128
+HIDDEN_SIZE = 7168
 TOKENS_PER_BLOCK = 64
+
+ROPE_CONFIG_DICT = {
+    "hidden_size": HIDDEN_SIZE,
+    "num_attention_heads": 128,
+    "rope_scaling": {
+        "beta_fast": 32,
+        "beta_slow": 1,
+        "factor": 40.0,
+        "mscale": 1.0,
+        "mscale_all_dim": 1.0,
+        "original_max_position_embeddings": 4096,
+        "type": "yarn",
+    },
+    "max_position_embeddings": 163840,
+    "rope_theta": 10000.0,
+    "qk_rope_head_dim": QK_ROPE_HEAD_DIM,
+    "model_type": "deepseek_v3",
+}
+
+
+class _RopeConfig:
+    """Minimal config object for RopeParams.from_config()."""
+
+    def __init__(self, d):
+        for k, v in d.items():
+            setattr(self, k, v)
+
+
+def _yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
 
 
 def profile_mla(
@@ -58,209 +99,258 @@ def profile_mla(
 ):
     """
     Profile a single MLA configuration.
-    Uses CUDA Graph capture + replay with NVTX markers, matching collect_mla.py.
+    Uses the same API as collect_mla_1_1rc2.py for identical kernel behaviour.
     """
     device = torch.device(device)
     torch.cuda.set_device(device)
 
-    num_key_value_heads = num_heads
-    assert num_key_value_heads % tp_size == 0
-    num_key_value_heads = num_key_value_heads // tp_size
+    dtype = torch.bfloat16
+    qk_head_dim = QK_NOPE_HEAD_DIM + QK_ROPE_HEAD_DIM
+
     assert num_heads % tp_size == 0
     num_heads = num_heads // tp_size
+    num_kv_heads = num_heads
 
-    world_size = tp_size
-    has_fp8_kv = kv_cache_dtype == tensorrt_llm.bindings.DataType.FP8
+    context_sequence_lengths = [input_len] * batch_size
+    num_generation_steps = 0 if is_context_phase else 1
 
+    # ── Attention backend (same as collect_mla_1_1rc2.py) ───────────────
+    attention_cls = get_attention_backend("TRTLLM")
+
+    rope_config = _RopeConfig(ROPE_CONFIG_DICT)
     pos_embd_params = PositionalEmbeddingParams(
         type=PositionEmbeddingType.yarn,
-        embedder=None,
-        rope=RopeParams(
-            dim=56, theta=10000,
-            scale_type=RotaryScalingType.yarn, scale=40,
-            low_freq_factor=1.0, high_freq_factor=4.0,
-            short_m_scale=1.0, long_m_scale=1.0,
-            max_positions=163840, original_max_positions=4096,
-            beta_fast=32, beta_slow=1,
-            mscale=1.0, mscale_all_dim=1.0,
-        ),
+        rope=RopeParams.from_config(rope_config),
+        is_neox=False,
     )
-
-    # quant_algo='FP8_BLOCK_SCALES' must only be set for FP8 KV cache;
-    # setting it for BF16 causes illegal memory access on SM100 (GB200).
-    quant_config = QuantConfig(
-        quant_algo='FP8_BLOCK_SCALES' if has_fp8_kv else None,
-        kv_cache_quant_algo=QuantAlgo.FP8 if has_fp8_kv else None,
-        group_size=None, smoothquant_val=0.5, clamp_val=None,
-        use_meta_recipe=False, has_zero_point=False,
-        pre_quant_scale=False, exclude_modules=None,
-    )
-
-    attn = create_attention(
-        backend_name="TRTLLM", layer_idx=0, num_heads=num_heads,
-        head_dim=((QK_NOPE_HEAD_DIM if is_context_phase else KV_LORA_RANK)
-                  + QK_ROPE_HEAD_DIM),
-        num_kv_heads=num_key_value_heads if is_context_phase else 1,
-        pos_embd_params=pos_embd_params, quant_config=quant_config,
-        is_mla_enable=True,
-        q_lora_rank=Q_LORA_RANK, kv_lora_rank=KV_LORA_RANK,
-        qk_nope_head_dim=QK_NOPE_HEAD_DIM, qk_rope_head_dim=QK_ROPE_HEAD_DIM,
-        v_head_dim=V_HEAD_DIM if is_context_phase else KV_LORA_RANK,
+    mla_params = MLAParams(
+        q_lora_rank=Q_LORA_RANK,
+        kv_lora_rank=KV_LORA_RANK,
+        qk_rope_head_dim=QK_ROPE_HEAD_DIM,
+        qk_nope_head_dim=QK_NOPE_HEAD_DIM,
+        v_head_dim=V_HEAD_DIM,
         predicted_tokens_per_seq=1,
     )
 
-    # ── KV cache setup ───────────────────────────────────────────────────
-    total_num_tokens = (input_len + output_len) * batch_size
-    mapping = Mapping(world_size=world_size, rank=0, tp_size=tp_size)
+    mscale_all_dim = pos_embd_params.rope.mscale_all_dim
+    scaling_factor = pos_embd_params.rope.scale
+    mscale = _yarn_get_mscale(scaling_factor, mscale_all_dim)
+    q_scaling = 1.0 / (mscale * mscale)
 
-    kv_cache_config = KvCacheConfig(
-        max_tokens=(int((input_len + output_len - 1) / TOKENS_PER_BLOCK + 1)
-                    * TOKENS_PER_BLOCK * batch_size * 2),
-        enable_block_reuse=False,
+    # quant_config: None for BF16, QuantConfig for FP8
+    # (collect_mla_1_1rc2.py passes literal None for BF16)
+    quant_config = None
+    if kv_cache_dtype == tensorrt_llm.bindings.DataType.FP8:
+        quant_config = QuantConfig(kv_cache_quant_algo=QuantAlgo.FP8.value)
+
+    if is_context_phase:
+        attn_mla = attention_cls(
+            layer_idx=0,
+            num_heads=num_heads,
+            head_dim=qk_head_dim,
+            num_kv_heads=num_kv_heads,
+            quant_config=quant_config,
+            q_scaling=q_scaling,
+            pos_embd_params=pos_embd_params,
+            mla_params=mla_params,
+        )
+    else:
+        attn_mla = attention_cls(
+            layer_idx=0,
+            num_heads=num_heads,
+            head_dim=KV_LORA_RANK + QK_ROPE_HEAD_DIM,
+            num_kv_heads=1,
+            quant_config=quant_config,
+            q_scaling=q_scaling,
+            pos_embd_params=pos_embd_params,
+            mla_params=mla_params,
+        )
+
+    # ── KV cache (same as collect_mla_1_1rc2.py) ───────────────────────
+    world_size = tp_size
+    mapping = Mapping(world_size=world_size, tp_size=tp_size, rank=0)
+
+    max_context_sequence_length = max(context_sequence_lengths)
+    max_num_contexts = len(context_sequence_lengths)
+
+    max_tokens = (
+        (
+            max_context_sequence_length
+            + (num_generation_steps + 1) * output_len
+            + TOKENS_PER_BLOCK
+            - 1
+        )
+        // TOKENS_PER_BLOCK
+        * TOKENS_PER_BLOCK
+        * max_num_contexts
     )
 
     kv_cache_manager = KVCacheManager(
-        kv_cache_config,
+        KvCacheConfig(max_tokens=max_tokens, enable_block_reuse=False),
         tensorrt_llm.bindings.internal.batch_manager.CacheType.SELFKONLY,
-        num_layers=1, num_kv_heads=1,
+        num_layers=1,
+        num_kv_heads=1,
         head_dim=KV_LORA_RANK + QK_ROPE_HEAD_DIM,
         tokens_per_block=TOKENS_PER_BLOCK,
-        max_seq_len=input_len + output_len,
-        max_batch_size=batch_size,
-        mapping=mapping, dtype=kv_cache_dtype,
+        max_seq_len=max_context_sequence_length + (num_generation_steps + 1) * output_len,
+        max_batch_size=max_num_contexts,
+        mapping=mapping,
+        dtype=kv_cache_dtype,
     )
 
-    input_seq_lens = [input_len] * batch_size
-    total_seq_lens = [input_len + output_len] * batch_size
-    request_ids = list(range(batch_size))
-    kv_cache_manager.add_dummy_requests(request_ids, total_seq_lens)
-
-    # On SM100 (GB200), Flash MLA context path causes illegal memory access.
-    sm_version = torch.cuda.get_device_capability()
-    enable_flash_mla = sm_version == (9, 0)
-
-    # Pre-allocate workspace to avoid dynamic resize crash on some platforms.
-    workspace = torch.tensor([], device=device, dtype=torch.int8)
-    if is_context_phase and input_len * batch_size > 1024:
-        workspace_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
-        workspace = torch.empty(workspace_bytes, device=device, dtype=torch.int8)
-
-    # ── Attention metadata ───────────────────────────────────────────────
-    if is_context_phase:
-        attn_metadata = TrtllmAttentionMetadata(
-            max_num_requests=batch_size, max_num_tokens=total_num_tokens,
-            kv_cache_manager=kv_cache_manager, mapping=mapping,
-            enable_flash_mla=enable_flash_mla,
-            seq_lens=torch.tensor(input_seq_lens, dtype=torch.int32),
-            position_ids=None, num_contexts=batch_size,
-            kv_cache_params=KVCacheParams(
-                use_cache=True,
-                num_cached_tokens_per_seq=[0] * batch_size,
-                block_ids_per_seq=None,
-                host_max_attention_window_sizes=None,
-                host_sink_token_length=None,
-            ),
-            cross=None, request_ids=request_ids,
-            prompt_lens=input_seq_lens,
-            runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
-            all_rank_num_tokens=None,
-            workspace=workspace,
+    # Use LlmRequest + add_sequence (same as collect_mla_1_1rc2.py)
+    for req_id, ctx_len in enumerate(context_sequence_lengths):
+        req = LlmRequest(
+            request_id=req_id,
+            max_new_tokens=num_generation_steps + 1,
+            input_tokens=[1] * ctx_len,
+            sampling_config=SamplingConfig(SamplingParams()._get_sampling_config()),
+            is_streaming=False,
         )
-    else:
-        attn_metadata = TrtllmAttentionMetadata(
-            max_num_requests=batch_size, max_num_tokens=total_num_tokens,
-            kv_cache_manager=kv_cache_manager, mapping=mapping,
-            enable_flash_mla=enable_flash_mla,
-            seq_lens=torch.tensor([1] * batch_size, dtype=torch.int32),
-            position_ids=None, num_contexts=0,
-            kv_cache_params=KVCacheParams(
-                use_cache=True,
-                num_cached_tokens_per_seq=input_seq_lens,
-                block_ids_per_seq=None,
-                host_max_attention_window_sizes=None,
-                host_sink_token_length=None,
-            ),
-            cross=None, request_ids=request_ids,
-            prompt_lens=input_seq_lens,
-            runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
-            all_rank_num_tokens=None,
-            workspace=workspace,
-        )
+        req.paged_kv_block_ids = []
+        kv_cache_manager.impl.add_sequence(req_id, ctx_len, 1, req)
 
+    # ── Metadata (matches collect_mla_1_1rc2.py exactly) ────────────────
+    attn_metadata = attention_cls.Metadata(
+        seq_lens=torch.tensor(context_sequence_lengths, dtype=torch.int),
+        request_ids=list(range(max_num_contexts)),
+        max_num_requests=max_num_contexts,
+        num_contexts=max_num_contexts,
+        prompt_lens=context_sequence_lengths,
+        max_num_tokens=max_context_sequence_length,
+        kv_cache_manager=kv_cache_manager,
+        kv_cache_params=KVCacheParams(
+            use_cache=True,
+            num_cached_tokens_per_seq=[0] * max_num_contexts,
+        ),
+        mapping=mapping,
+    )
     attn_metadata.prepare()
 
-    # ── Input tensors ────────────────────────────────────────────────────
-    num_tokens = input_len * batch_size if is_context_phase else batch_size
+    if not is_context_phase:
+        for req_id in range(max_num_contexts):
+            for _ in range(output_len):
+                kv_cache_manager.impl.add_token(req_id)
+        attn_metadata = attention_cls.Metadata(
+            seq_lens=torch.tensor([output_len] * max_num_contexts, dtype=torch.int),
+            request_ids=list(range(max_num_contexts)),
+            max_num_requests=max_num_contexts,
+            num_contexts=0,
+            prompt_lens=context_sequence_lengths,
+            max_num_tokens=max_context_sequence_length,
+            kv_cache_manager=kv_cache_manager,
+            kv_cache_params=KVCacheParams(
+                use_cache=True,
+                num_cached_tokens_per_seq=list(context_sequence_lengths),
+            ),
+            mapping=mapping,
+            enable_flash_mla=torch.cuda.get_device_capability() == (9, 0),
+        )
+        attn_metadata.prepare()
 
-    compressed_kv = torch.randn([num_tokens, KV_LORA_RANK], dtype=torch.bfloat16, device=device)
-    k_pe = torch.randn([num_tokens, QK_ROPE_HEAD_DIM], dtype=torch.bfloat16, device=device)
-    latent_cache = torch.cat([compressed_kv, k_pe], dim=-1)
-
+    # ── Input tensors (matches collect_mla_1_1rc2.py) ───────────────────
     if is_context_phase:
-        q = torch.randn(
-            [num_tokens, num_heads * (QK_NOPE_HEAD_DIM + QK_ROPE_HEAD_DIM)],
-            dtype=torch.bfloat16, device=device,
+        ctx_len = input_len
+        num_tokens = ctx_len * max_num_contexts
+
+        compressed_kv = torch.randn([num_tokens, KV_LORA_RANK], dtype=dtype, device=device)
+        k_pe = torch.randn([num_tokens, QK_ROPE_HEAD_DIM], dtype=dtype, device=device)
+
+        q = torch.randn([num_tokens, num_heads * qk_head_dim], dtype=dtype, device=device)
+        ctx_kv = torch.randn(
+            [num_tokens, num_kv_heads * (QK_NOPE_HEAD_DIM + V_HEAD_DIM)],
+            dtype=dtype, device=device,
         )
-        k = torch.randn(
-            [num_tokens, num_key_value_heads * (QK_NOPE_HEAD_DIM + QK_ROPE_HEAD_DIM)],
-            dtype=torch.bfloat16, device=device,
+        ctx_k_nope, v = ctx_kv.split(
+            [num_kv_heads * QK_NOPE_HEAD_DIM, num_kv_heads * V_HEAD_DIM], dim=-1
         )
-        v = torch.randn(
-            [num_tokens, num_key_value_heads * V_HEAD_DIM],
-            dtype=torch.bfloat16, device=device,
+        ctx_k_nope = ctx_k_nope.view(-1, num_kv_heads, QK_NOPE_HEAD_DIM)
+        k = torch.cat(
+            [ctx_k_nope, k_pe.view(-1, 1, QK_ROPE_HEAD_DIM).expand(-1, num_kv_heads, -1)],
+            dim=-1,
+        ).view(-1, num_kv_heads * qk_head_dim)
+
+        latent_cache = torch.cat([compressed_kv, k_pe], dim=-1)
+
+        # Dry run (same as collect_mla_1_1rc2.py L448-455)
+        attn_mla.forward(
+            q, k, v, attn_metadata,
+            attention_input_type=AttentionInputType.context_only,
+            latent_cache=latent_cache,
         )
-        q_pe = None
     else:
+        num_tokens = output_len * max_num_contexts
+
+        compressed_kv = torch.randn([num_tokens, KV_LORA_RANK], dtype=dtype, device=device)
+        k_pe = torch.randn([num_tokens, QK_ROPE_HEAD_DIM], dtype=dtype, device=device)
+
         fused_q = torch.randn(
             [num_tokens, num_heads * (KV_LORA_RANK + QK_ROPE_HEAD_DIM)],
-            dtype=torch.bfloat16, device=device,
+            dtype=dtype, device=device,
         )
         q_pe = torch.randn(
             [num_tokens, num_heads, QK_ROPE_HEAD_DIM],
-            dtype=torch.bfloat16, device=device,
+            dtype=dtype, device=device,
         )
 
-    # ── Generation parameters ────────────────────────────────────────────
-    cu_q_seqlens = None
-    cu_kv_seqlens = None
-    fmha_scheduler_counter = None
-    mla_bmm1_scale = None
-    mla_bmm2_scale = None
-    quant_q_buffer = None
+        latent_cache = torch.cat([compressed_kv, k_pe], dim=-1)
 
-    if not is_context_phase:
-        cu_q_seqlens = torch.empty(batch_size + 1, dtype=torch.int32, device=device)
-        cu_kv_seqlens = torch.empty(batch_size + 1, dtype=torch.int32, device=device)
+        # Generation setup (same as collect_mla_1_1rc2.py L487-542)
+        num_seqs = max_num_contexts
+        cu_q_seqlens = torch.empty(num_seqs + 1, dtype=torch.int32, device=device)
+        cu_kv_seqlens = torch.empty(num_seqs + 1, dtype=torch.int32, device=device)
         fmha_scheduler_counter = torch.empty(1, dtype=torch.uint32, device=device)
 
-        if has_fp8_kv:
+        has_fp8_kv_cache = attn_mla.has_fp8_kv_cache if hasattr(attn_mla, "has_fp8_kv_cache") else False
+        if has_fp8_kv_cache:
             mla_bmm1_scale = torch.empty(2, dtype=torch.float32, device=device)
             mla_bmm2_scale = torch.empty(1, dtype=torch.float32, device=device)
             quant_q_buffer = torch.empty(
-                num_tokens, num_heads, KV_LORA_RANK + QK_ROPE_HEAD_DIM,
+                num_tokens, num_heads * (KV_LORA_RANK + QK_ROPE_HEAD_DIM),
                 dtype=torch.uint8, device=device,
             )
+        else:
+            mla_bmm1_scale = None
+            mla_bmm2_scale = None
+            quant_q_buffer = None
 
-        fused_q_3d = fused_q.view(num_tokens, num_heads, KV_LORA_RANK + QK_ROPE_HEAD_DIM)
-        attn.mla_rope_generation(
-            fused_q_3d, q_pe, latent_cache, attn_metadata,
+        # Dry run: mla_rope_generation + forward
+        attn_mla.mla_rope_generation(
+            fused_q, q_pe, latent_cache, attn_metadata,
             cu_q_seqlens, cu_kv_seqlens, fmha_scheduler_counter,
             mla_bmm1_scale, mla_bmm2_scale, quant_q_buffer,
         )
+        attn_mla.forward(
+            fused_q, None, None, attn_metadata,
+            attention_input_type=AttentionInputType.generation_only,
+            latent_cache=latent_cache,
+            q_pe=q_pe,
+            cu_q_seqlens=cu_q_seqlens,
+            cu_kv_seqlens=cu_kv_seqlens,
+            fmha_scheduler_counter=fmha_scheduler_counter,
+            mla_bmm1_scale=mla_bmm1_scale,
+            mla_bmm2_scale=mla_bmm2_scale,
+            quant_q_buffer=quant_q_buffer,
+        )
 
-    # ── Helper: single forward call ──────────────────────────────────────
-    def _forward():
+    print(f"  [{label}] dry run succeeded")
+
+    # ── Kernel function (matches collect_mla_1_1rc2.py kernel_func) ─────
+    def kernel_func():
         if is_context_phase:
-            attn.forward(
+            attn_mla.forward(
                 q, k, v, attn_metadata,
-                out_scale=None,
                 attention_input_type=AttentionInputType.context_only,
                 latent_cache=latent_cache,
             )
         else:
-            attn.forward(
+            attn_mla.mla_rope_generation(
+                fused_q, q_pe, latent_cache, attn_metadata,
+                cu_q_seqlens, cu_kv_seqlens, fmha_scheduler_counter,
+                mla_bmm1_scale, mla_bmm2_scale, quant_q_buffer,
+            )
+            attn_mla.forward(
                 fused_q, None, None, attn_metadata,
-                out_scale=None,
                 attention_input_type=AttentionInputType.generation_only,
                 latent_cache=latent_cache,
                 q_pe=q_pe,
@@ -272,47 +362,31 @@ def profile_mla(
                 quant_q_buffer=quant_q_buffer,
             )
 
-    # ── Step 1: warmup (matches benchmark_with_power: multiple eager runs
-    #    to stabilize ALL internal C++ buffers before graph capture) ───────
-    torch.cuda.synchronize()
-    for _ in range(warming_up):
-        _forward()
-    torch.cuda.synchronize()
-    print(f"  [{label}] warmup succeeded ({warming_up} eager runs)")
-
-    # ── Step 2: CUDA Graph capture ───────────────────────────────────────
-    g = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(g):
-        _forward()
-
-    # ── Step 3: warmup ───────────────────────────────────────────────────
-    for _ in range(warming_up):
-        g.replay()
-
-    # ── Step 4: profiled replays with NVTX ───────────────────────────────
+    # ── Profiled benchmark ──────────────────────────────────────────────
     torch.cuda.nvtx.range_push(f"PROFILE_{label}")
-    for i in range(profile_iters):
-        torch.cuda.nvtx.range_push(f"{label}/iter{i}")
-        g.replay()
-        torch.cuda.nvtx.range_pop()
-    torch.cuda.synchronize()
+
+    with benchmark_with_power(
+        device=device,
+        kernel_func=kernel_func,
+        num_warmups=warming_up,
+        num_runs=profile_iters,
+        repeat_n=1,
+        allow_graph_fail=True,
+    ) as results:
+        pass
+
     torch.cuda.nvtx.range_pop()
 
-    # ── Timing ───────────────────────────────────────────────────────────
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record()
-    for _ in range(profile_iters):
-        g.replay()
-    end_event.record()
-    torch.cuda.synchronize()
-    latency = start_event.elapsed_time(end_event) / profile_iters
-    print(f"  [{label}] latency = {latency:.4f} ms")
+    latency = results["latency_ms"]
+    used_graph = results.get("used_cuda_graph", "unknown")
+    print(f"  [{label}] latency = {latency:.4f} ms  (cuda_graph={used_graph})")
+
+    kv_cache_manager.shutdown()
 
 
 def main():
     INPUT_LEN = 8192
-    OUTPUT_LEN = 1024
+    OUTPUT_LEN = 1      # context test: output_len=1 (matches collect_mla_1_1rc2.py)
     BATCH_SIZE = 1
     NUM_HEADS = 128
     TP_SIZE = 1
@@ -324,43 +398,26 @@ def main():
     FP8 = tensorrt_llm.bindings.DataType.FP8
 
     configs = [
-        # (kv_cache_dtype, is_context_phase, label)
-        (BF16, True,  "context_bf16"),
-        (FP8,  True,  "context_fp8"),
-        (BF16, False, "generation_bf16"),
-        (FP8,  False, "generation_fp8"),
+        # (kv_cache_dtype, is_context_phase, output_len, label)
+        (BF16, True,  1,   "context_bf16"),
+        (FP8,  True,  1,   "context_fp8"),
+        (BF16, False, 1,   "generation_bf16"),
+        (FP8,  False, 1,   "generation_fp8"),
     ]
-
-    # ── Bootstrap: run a small generation to initialize C++ internal state ──
-    # The TRT-LLM C++ attention op requires one-time global initialization.
-    # Without it, the first large context call (ISL=8192) can crash on GB200.
-    # collect.py avoids this naturally because it starts with small ISL values.
-    print("Bootstrapping C++ attention state with a small generation run...")
-    try:
-        profile_mla(
-            input_len=64, batch_size=1, output_len=64,
-            kv_cache_dtype=BF16, num_heads=NUM_HEADS, tp_size=TP_SIZE,
-            is_context_phase=False, warming_up=2,
-            profile_iters=1, label="_bootstrap", device=DEVICE,
-        )
-        print("Bootstrap succeeded.\n")
-    except Exception as e:
-        print(f"Bootstrap warning: {e}\n")
-    torch.cuda.synchronize()
 
     torch.cuda.cudart().cudaProfilerStart()
 
-    for kv_dtype, is_ctx, label in configs:
+    for kv_dtype, is_ctx, osl, label in configs:
         phase = "prefill" if is_ctx else "decode"
         dtype_name = "BF16" if kv_dtype == BF16 else "FP8"
         print(f"\n{'='*60}")
         print(f"[{label}] {phase} | KV={dtype_name} | "
-              f"ISL={INPUT_LEN} OSL={OUTPUT_LEN} BS={BATCH_SIZE}")
+              f"ISL={INPUT_LEN} OSL={osl} BS={BATCH_SIZE}")
         print(f"{'='*60}")
 
         try:
             profile_mla(
-                input_len=INPUT_LEN, batch_size=BATCH_SIZE, output_len=OUTPUT_LEN,
+                input_len=INPUT_LEN, batch_size=BATCH_SIZE, output_len=osl,
                 kv_cache_dtype=kv_dtype, num_heads=NUM_HEADS, tp_size=TP_SIZE,
                 is_context_phase=is_ctx, warming_up=WARMUP_ITERS,
                 profile_iters=PROFILE_ITERS, label=label, device=DEVICE,
