@@ -15,93 +15,48 @@ from tensorrt_llm._torch.pyexecutor.resource_manager import KVCacheManager
 from tensorrt_llm.functional import PositionEmbeddingType, RotaryScalingType
 from tensorrt_llm.llmapi import KvCacheConfig
 from tensorrt_llm.mapping import Mapping
-from tensorrt_llm.models.modeling_utils import QuantConfig
+from tensorrt_llm.models.modeling_utils import QuantConfig, QuantAlgo
 
 from helper import benchmark_with_power, log_perf
 
 
 # TODO: refactor to use common_test_cases.py
 def get_context_mla_test_cases():
-    dtype_list = [tensorrt_llm.bindings.DataType.BF16]  # not support f8 for trt < v1.1
+    dtype_list = [tensorrt_llm.bindings.DataType.FP8, tensorrt_llm.bindings.DataType.BF16]
     test_cases = []
     n_list = [128]
     b_list = [1, 2, 4, 8, 16, 32, 64, 128, 256]
     s_list = [1, 16, 32, 64, 128, 256, 512, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 32768]
     for n in n_list:
         for b in b_list:
-            for s in s_list:  # [2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,131072]:
+            for s in s_list:
                 for dtype in dtype_list:
                     for tp_size in [1, 2, 4, 8, 16, 32, 64, 128]:
                         if b * s > 65536:
                             continue
-                        # (input_len, batch_size, output_len, kv_cache_dtype, num_heads, world_size,
-                        #  tp_size, tokens_per_block, warming_up, test_ite, is_context_phase)
                         test_cases.append(
-                            [
-                                s,
-                                b,
-                                1,
-                                dtype,
-                                n,
-                                tp_size,
-                                tp_size,
-                                64,
-                                10,
-                                6,
-                                True,
-                                "context_mla_perf.txt",
-                            ]
+                            [s, b, 1, dtype, n, tp_size, tp_size, 64, 10, 6, True, "context_mla_perf.txt"]
                         )
     return test_cases
 
 
 # TODO: refactor to use common_test_cases.py
 def get_generation_mla_test_cases():
-    dtype_list = [tensorrt_llm.bindings.DataType.BF16]  # not support f8 for trt < v1.1
+    dtype_list = [tensorrt_llm.bindings.DataType.FP8, tensorrt_llm.bindings.DataType.BF16]
     test_cases = []
     n_list = [128]
     for n in n_list:
         for b in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
             for s in [
-                2,
-                4,
-                8,
-                16,
-                32,
-                64,
-                128,
-                256,
-                512,
-                1024,
-                2048,
-                4096,
-                8192,
-                16384,
-                32768,
-                65536,
-                131072,
-            ]:  # [target token s] is equivalent to [in: s-1, step=1]
+                2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
+                2048, 4096, 8192, 16384, 32768, 65536, 131072,
+            ]:
                 for dtype in dtype_list:
                     for tp_size in [1, 2, 4, 8, 16, 32, 64, 128]:
                         if b * s > 1024 * 4096 * 2 * 2:
                             continue
-                        # (input_len, batch_size, output_len, kv_cache_dtype, num_heads, world_size,
-                        #  tp_size, tokens_per_block, warming_up, test_ite, is_context_phase)
                         test_cases.append(
-                            [
-                                s - 1,
-                                b,
-                                1,
-                                dtype,
-                                n,
-                                tp_size,
-                                tp_size,
-                                64,
-                                10,
-                                6,
-                                False,
-                                "generation_mla_perf.txt",
-                            ]
+                            [s - 1, b, 1, dtype, n, tp_size, tp_size, 64, 10, 6, False, "generation_mla_perf.txt"]
                         )
     return test_cases
 
@@ -126,10 +81,11 @@ def run_mla(
     backend_name = "TRTLLM"
     layer_idx = 0
 
-    assert kv_cache_dtype == tensorrt_llm.bindings.DataType.BF16, "only support bfloat16 for trtllm"
     assert num_heads % tp_size == 0, "num_heads != N * tp_size"
     num_heads = num_heads // tp_size
     num_key_value_heads = num_heads
+
+    has_fp8_kv_cache = kv_cache_dtype == tensorrt_llm.bindings.DataType.FP8
 
     pos_embd_params = PositionalEmbeddingParams(
         type=PositionEmbeddingType.yarn,
@@ -153,7 +109,8 @@ def run_mla(
     )
 
     quant_config = QuantConfig(
-        kv_cache_quant_algo=None,
+        quant_algo='FP8_BLOCK_SCALES',
+        kv_cache_quant_algo=QuantAlgo.FP8 if has_fp8_kv_cache else None,
         group_size=None,
         smoothquant_val=0.5,
         clamp_val=None,
@@ -196,7 +153,7 @@ def run_mla(
         max_tokens=int((input_len + output_len - 1) / tokens_per_block + 1)
         * tokens_per_block
         * batch_size
-        * 2,  # num_bloacks * block_size
+        * 2,
         enable_block_reuse=False,
     )
 
@@ -218,6 +175,11 @@ def run_mla(
     request_ids = list(range(batch_size))
     kv_cache_manager.add_dummy_requests(request_ids, total_seq_lens)
 
+    # On SM100 (GB200), Flash MLA context path causes illegal memory access.
+    # Only enable on SM90 (Hopper) where Flash MLA is fully supported.
+    sm_version = torch.cuda.get_device_capability()
+    enable_flash_mla = sm_version == (9, 0)
+
     if is_context_phase:
         num_cached_tokens_per_seq = [0 for _ in range(batch_size)]
         attn_metadata = TrtllmAttentionMetadata(
@@ -225,7 +187,7 @@ def run_mla(
             max_num_tokens=total_num_tokens,
             kv_cache_manager=kv_cache_manager,
             mapping=mapping,
-            enable_flash_mla=True,
+            enable_flash_mla=enable_flash_mla,
             seq_lens=torch.tensor(input_seq_lens, dtype=torch.int32),
             position_ids=None,
             num_contexts=batch_size,
@@ -250,7 +212,7 @@ def run_mla(
             max_num_tokens=total_num_tokens,
             kv_cache_manager=kv_cache_manager,
             mapping=mapping,
-            enable_flash_mla=True,
+            enable_flash_mla=enable_flash_mla,
             seq_lens=torch.tensor(gen_seq_lens, dtype=torch.int32),
             position_ids=None,
             num_contexts=0,
@@ -278,76 +240,89 @@ def run_mla(
 
     compressed_kv = torch.randn([num_tokens, kv_lora_rank], dtype=torch.bfloat16, device=device)
     k_pe = torch.randn([num_tokens, qk_rope_head_dim], dtype=torch.bfloat16, device=device)
-
     latent_cache = torch.cat([compressed_kv, k_pe], dim=-1)
 
-    # self.qk_nope_head_dim + self.qk_rope_head_dim
+    # ── Input tensors ────────────────────────────────────────────────────
+    # TRT-LLM 1.2.0rc6 MLA context requires separate Q, K, V (assert not is_fused_qkv).
     if is_context_phase:
-        fused_q = torch.randn(
-            [
-                num_tokens,
-                num_heads
-                * (
-                    qk_nope_head_dim + qk_rope_head_dim + qk_nope_head_dim + qk_rope_head_dim + v_head_dim
-                ),  # 128 128 64
-            ],
-            device=device,
-            dtype=torch.bfloat16,
+        q = torch.randn(
+            [num_tokens, num_heads * (qk_nope_head_dim + qk_rope_head_dim)],
+            dtype=torch.bfloat16, device=device,
+        )
+        k = torch.randn(
+            [num_tokens, num_key_value_heads * (qk_nope_head_dim + qk_rope_head_dim)],
+            dtype=torch.bfloat16, device=device,
+        )
+        v = torch.randn(
+            [num_tokens, num_key_value_heads * v_head_dim],
+            dtype=torch.bfloat16, device=device,
         )
         q_pe = None
     else:
         fused_q = torch.randn(
             [num_tokens, num_heads * (kv_lora_rank + qk_rope_head_dim)],
-            device=device,
-            dtype=torch.bfloat16,
+            device=device, dtype=torch.bfloat16,
         )
-        q_pe = torch.randn([num_tokens, num_heads, qk_rope_head_dim], dtype=torch.bfloat16, device=device)
-
-    # dry run
-    if is_context_phase:
-        attn.forward(
-            fused_q,
-            None,
-            None,
-            attn_metadata,
-            out_scale=torch.tensor([]).float().to(torch.device(device)),
-            attention_input_type=AttentionInputType.context_only,
-            latent_cache=latent_cache,
-        )
-    else:
-        attn.forward(
-            fused_q,
-            None,
-            None,
-            attn_metadata,
-            out_scale=torch.tensor([]).float().to(torch.device(device)),
-            attention_input_type=AttentionInputType.generation_only,
-            latent_cache=latent_cache,
-            q_pe=q_pe,
+        q_pe = torch.randn(
+            [num_tokens, num_heads, qk_rope_head_dim],
+            dtype=torch.bfloat16, device=device,
         )
 
-    # Use benchmark_with_power context manager
+    # ── Generation parameters ────────────────────────────────────────────
+    # TRT-LLM 1.2.0rc6 MLA generation kernel requires cu_q_seqlens for ALL
+    # precisions (not just FP8). mla_rope_generation fills these buffers.
+    cu_q_seqlens = None
+    cu_kv_seqlens = None
+    fmha_scheduler_counter = None
+    mla_bmm1_scale = None
+    mla_bmm2_scale = None
+    quant_q_buffer = None
+
+    if not is_context_phase:
+        cu_q_seqlens = torch.empty(batch_size + 1, dtype=torch.int32, device=device)
+        cu_kv_seqlens = torch.empty(batch_size + 1, dtype=torch.int32, device=device)
+        fmha_scheduler_counter = torch.empty(1, dtype=torch.uint32, device=device)
+
+        if has_fp8_kv_cache:
+            mla_bmm1_scale = torch.empty(2, dtype=torch.float32, device=device)
+            mla_bmm2_scale = torch.empty(1, dtype=torch.float32, device=device)
+            quant_q_buffer = torch.empty(
+                num_tokens, num_heads, kv_lora_rank + qk_rope_head_dim,
+                dtype=torch.uint8, device=device,
+            )
+
+        # Setup: call mla_rope_generation to apply RoPE, update KV cache,
+        # fill cu_q_seqlens/cu_kv_seqlens (and FP8 quant if applicable).
+        # This is NOT the measured kernel — it is pre-computation.
+        fused_q_3d = fused_q.view(num_tokens, num_heads, kv_lora_rank + qk_rope_head_dim)
+        attn.mla_rope_generation(
+            fused_q_3d, q_pe, latent_cache, attn_metadata,
+            cu_q_seqlens, cu_kv_seqlens, fmha_scheduler_counter,
+            mla_bmm1_scale, mla_bmm2_scale, quant_q_buffer,
+        )
+
+    # ── Kernel function for benchmarking ─────────────────────────────────
     def kernel_func():
         if is_context_phase:
             attn.forward(
-                fused_q,
-                None,
-                None,
-                attn_metadata,
-                out_scale=torch.tensor([]).float().to(torch.device(device)),
+                q, k, v, attn_metadata,
+                out_scale=None,
                 attention_input_type=AttentionInputType.context_only,
                 latent_cache=latent_cache,
             )
         else:
             attn.forward(
-                fused_q,
-                None,
-                None,
-                attn_metadata,
-                out_scale=torch.tensor([]).float().to(torch.device(device)),
+                fused_q, None, None, attn_metadata,
+                out_scale=None,
                 attention_input_type=AttentionInputType.generation_only,
                 latent_cache=latent_cache,
                 q_pe=q_pe,
+                cu_q_seqlens=cu_q_seqlens,
+                cu_kv_seqlens=cu_kv_seqlens,
+                fmha_scheduler_counter=fmha_scheduler_counter,
+                mla_bmm1_scale=mla_bmm1_scale,
+                mla_bmm2_scale=mla_bmm2_scale,
+                quant_q_buffer=quant_q_buffer,
             )
 
     with benchmark_with_power(
@@ -369,11 +344,13 @@ def run_mla(
         isl = 1
         step = input_len
 
+    dtype_str = 'fp8' if has_fp8_kv_cache else 'float16'
+
     log_perf(
         item_list=[
             {
                 "mla_dtype": "float16",
-                "kv_cache_dtype": "float16",
+                "kv_cache_dtype": dtype_str,
                 "num_heads": num_heads,
                 "batch_size": batch_size,
                 "isl": isl,
