@@ -272,10 +272,13 @@ def profile_mla(
                 quant_q_buffer=quant_q_buffer,
             )
 
-    # ── Step 1: dry run ──────────────────────────────────────────────────
-    _forward()
+    # ── Step 1: warmup (matches benchmark_with_power: multiple eager runs
+    #    to stabilize ALL internal C++ buffers before graph capture) ───────
     torch.cuda.synchronize()
-    print(f"  [{label}] dry run succeeded")
+    for _ in range(warming_up):
+        _forward()
+    torch.cuda.synchronize()
+    print(f"  [{label}] warmup succeeded ({warming_up} eager runs)")
 
     # ── Step 2: CUDA Graph capture ───────────────────────────────────────
     g = torch.cuda.CUDAGraph()
