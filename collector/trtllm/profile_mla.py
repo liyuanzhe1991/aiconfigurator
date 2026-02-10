@@ -328,6 +328,23 @@ def main():
         (FP8,  False, "generation_fp8"),
     ]
 
+    # ── Bootstrap: run a small generation to initialize C++ internal state ──
+    # The TRT-LLM C++ attention op requires one-time global initialization.
+    # Without it, the first large context call (ISL=8192) can crash on GB200.
+    # collect.py avoids this naturally because it starts with small ISL values.
+    print("Bootstrapping C++ attention state with a small generation run...")
+    try:
+        profile_mla(
+            input_len=64, batch_size=1, output_len=64,
+            kv_cache_dtype=BF16, num_heads=NUM_HEADS, tp_size=TP_SIZE,
+            is_context_phase=False, warming_up=2,
+            profile_iters=1, label="_bootstrap", device=DEVICE,
+        )
+        print("Bootstrap succeeded.\n")
+    except Exception as e:
+        print(f"Bootstrap warning: {e}\n")
+    torch.cuda.synchronize()
+
     torch.cuda.cudart().cudaProfilerStart()
 
     for kv_dtype, is_ctx, label in configs:
