@@ -403,27 +403,29 @@ def main():
     BF16 = tensorrt_llm.bindings.DataType.BF16
     FP8 = tensorrt_llm.bindings.DataType.FP8
 
+    DECODE_BATCH_SIZE = 256
+
     configs = [
-        # (kv_cache_dtype, is_context_phase, output_len, label)
-        (BF16, True,  1,   "context_bf16"),
-        (FP8,  True,  1,   "context_fp8"),
-        (BF16, False, 1,   "generation_bf16"),
-        (FP8,  False, 1,   "generation_fp8"),
+        # (kv_cache_dtype, is_context_phase, output_len, batch_size, label)
+        (BF16, True,  1, BATCH_SIZE,        "context_bf16"),
+        (FP8,  True,  1, BATCH_SIZE,        "context_fp8"),
+        (BF16, False, 1, DECODE_BATCH_SIZE, "generation_bf16"),
+        (FP8,  False, 1, DECODE_BATCH_SIZE, "generation_fp8"),
     ]
 
     torch.cuda.cudart().cudaProfilerStart()
 
-    for kv_dtype, is_ctx, osl, label in configs:
+    for kv_dtype, is_ctx, osl, bs, label in configs:
         phase = "prefill" if is_ctx else "decode"
         dtype_name = "BF16" if kv_dtype == BF16 else "FP8"
         print(f"\n{'='*60}")
         print(f"[{label}] {phase} | KV={dtype_name} | "
-              f"ISL={INPUT_LEN} OSL={osl} BS={BATCH_SIZE}")
+              f"ISL={INPUT_LEN} OSL={osl} BS={bs}")
         print(f"{'='*60}")
 
         try:
             profile_mla(
-                input_len=INPUT_LEN, batch_size=BATCH_SIZE, output_len=osl,
+                input_len=INPUT_LEN, batch_size=bs, output_len=osl,
                 kv_cache_dtype=kv_dtype, num_heads=NUM_HEADS, tp_size=TP_SIZE,
                 is_context_phase=is_ctx, warming_up=WARMUP_ITERS,
                 profile_iters=PROFILE_ITERS, label=label, device=DEVICE,
