@@ -26,6 +26,12 @@ NVTX markers in the report:
 """
 
 import math
+import os
+import sys
+
+# Allow running directly from collector/trtllm/ — add parent dir to path
+# so that `from helper import ...` resolves to collector/helper.py
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import torch
 
