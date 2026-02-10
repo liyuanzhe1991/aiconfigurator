@@ -177,17 +177,7 @@ def run_mla(
     request_ids = list(range(batch_size))
     kv_cache_manager.add_dummy_requests(request_ids, total_seq_lens)
 
-    # On SM100 (GB200), Flash MLA context path causes illegal memory access.
-    # Only enable on SM90 (Hopper) where Flash MLA is fully supported.
-    sm_version = torch.cuda.get_device_capability()
-    enable_flash_mla = sm_version == (9, 0)
-
-    # Pre-allocate workspace to avoid dynamic resize in C++ which can crash
-    # on some platforms. The FMHA kernel needs ~1.2GB for ISL=8192/NH=128.
-    workspace = torch.tensor([], device=device, dtype=torch.int8)
-    if is_context_phase and input_len * batch_size > 1024:
-        workspace_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
-        workspace = torch.empty(workspace_bytes, device=device, dtype=torch.int8)
+    enable_flash_mla = True
 
     if is_context_phase:
         num_cached_tokens_per_seq = [0 for _ in range(batch_size)]
@@ -212,7 +202,7 @@ def run_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=workspace,
+            workspace=torch.tensor([], device=device, dtype=torch.int8),
         )
     else:
         gen_seq_lens = [1 for _ in range(batch_size)]
@@ -237,7 +227,7 @@ def run_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=workspace,
+            workspace=torch.tensor([], device=device, dtype=torch.int8),
         )
 
     attn_metadata.prepare()
@@ -251,20 +241,17 @@ def run_mla(
     k_pe = torch.randn([num_tokens, qk_rope_head_dim], dtype=torch.bfloat16, device=device)
     latent_cache = torch.cat([compressed_kv, k_pe], dim=-1)
 
-    # ── Input tensors ────────────────────────────────────────────────────
-    # TRT-LLM 1.2.0rc6 MLA context requires separate Q, K, V (assert not is_fused_qkv).
     if is_context_phase:
-        q = torch.randn(
-            [num_tokens, num_heads * (qk_nope_head_dim + qk_rope_head_dim)],
-            dtype=torch.bfloat16, device=device,
-        )
-        k = torch.randn(
-            [num_tokens, num_key_value_heads * (qk_nope_head_dim + qk_rope_head_dim)],
-            dtype=torch.bfloat16, device=device,
-        )
-        v = torch.randn(
-            [num_tokens, num_key_value_heads * v_head_dim],
-            dtype=torch.bfloat16, device=device,
+        fused_q = torch.randn(
+            [
+                num_tokens,
+                num_heads
+                * (
+                    qk_nope_head_dim + qk_rope_head_dim + qk_nope_head_dim + qk_rope_head_dim + v_head_dim
+                ),
+            ],
+            device=device,
+            dtype=torch.bfloat16,
         )
         q_pe = None
     else:
@@ -314,7 +301,10 @@ def run_mla(
     def kernel_func():
         if is_context_phase:
             attn.forward(
-                q, k, v, attn_metadata,
+                fused_q,
+                None,
+                None,
+                attn_metadata,
                 out_scale=None,
                 attention_input_type=AttentionInputType.context_only,
                 latent_cache=latent_cache,
