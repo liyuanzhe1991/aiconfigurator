@@ -108,8 +108,10 @@ def run_mla(
         ),
     )
 
+    # quant_algo='FP8_BLOCK_SCALES' must only be set for FP8 KV cache;
+    # setting it for BF16 causes illegal memory access on SM100 (GB200).
     quant_config = QuantConfig(
-        quant_algo='FP8_BLOCK_SCALES',
+        quant_algo='FP8_BLOCK_SCALES' if has_fp8_kv_cache else None,
         kv_cache_quant_algo=QuantAlgo.FP8 if has_fp8_kv_cache else None,
         group_size=None,
         smoothquant_val=0.5,
@@ -180,6 +182,13 @@ def run_mla(
     sm_version = torch.cuda.get_device_capability()
     enable_flash_mla = sm_version == (9, 0)
 
+    # Pre-allocate workspace to avoid dynamic resize in C++ which can crash
+    # on some platforms. The FMHA kernel needs ~1.2GB for ISL=8192/NH=128.
+    workspace = torch.tensor([], device=device, dtype=torch.int8)
+    if is_context_phase and input_len * batch_size > 1024:
+        workspace_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
+        workspace = torch.empty(workspace_bytes, device=device, dtype=torch.int8)
+
     if is_context_phase:
         num_cached_tokens_per_seq = [0 for _ in range(batch_size)]
         attn_metadata = TrtllmAttentionMetadata(
@@ -203,7 +212,7 @@ def run_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=torch.tensor([], device=device, dtype=torch.int8),
+            workspace=workspace,
         )
     else:
         gen_seq_lens = [1 for _ in range(batch_size)]
@@ -228,7 +237,7 @@ def run_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=torch.tensor([], device=device, dtype=torch.int8),
+            workspace=workspace,
         )
 
     attn_metadata.prepare()

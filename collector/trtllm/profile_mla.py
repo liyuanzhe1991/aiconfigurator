@@ -86,8 +86,10 @@ def profile_mla(
         ),
     )
 
+    # quant_algo='FP8_BLOCK_SCALES' must only be set for FP8 KV cache;
+    # setting it for BF16 causes illegal memory access on SM100 (GB200).
     quant_config = QuantConfig(
-        quant_algo='FP8_BLOCK_SCALES',
+        quant_algo='FP8_BLOCK_SCALES' if has_fp8_kv else None,
         kv_cache_quant_algo=QuantAlgo.FP8 if has_fp8_kv else None,
         group_size=None, smoothquant_val=0.5, clamp_val=None,
         use_meta_recipe=False, has_zero_point=False,
@@ -137,6 +139,12 @@ def profile_mla(
     sm_version = torch.cuda.get_device_capability()
     enable_flash_mla = sm_version == (9, 0)
 
+    # Pre-allocate workspace to avoid dynamic resize crash on some platforms.
+    workspace = torch.tensor([], device=device, dtype=torch.int8)
+    if is_context_phase and input_len * batch_size > 1024:
+        workspace_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
+        workspace = torch.empty(workspace_bytes, device=device, dtype=torch.int8)
+
     # ── Attention metadata ───────────────────────────────────────────────
     if is_context_phase:
         attn_metadata = TrtllmAttentionMetadata(
@@ -156,7 +164,7 @@ def profile_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=torch.tensor([], device=device, dtype=torch.int8),
+            workspace=workspace,
         )
     else:
         attn_metadata = TrtllmAttentionMetadata(
@@ -176,7 +184,7 @@ def profile_mla(
             prompt_lens=input_seq_lens,
             runtime_features=AttentionRuntimeFeatures(chunked_prefill=False, cache_reuse=False),
             all_rank_num_tokens=None,
-            workspace=torch.tensor([], device=device, dtype=torch.int8),
+            workspace=workspace,
         )
 
     attn_metadata.prepare()
