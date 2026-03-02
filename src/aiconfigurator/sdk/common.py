@@ -137,7 +137,9 @@ def check_support(
     exact_matches = [
         row
         for row in matrix
-        if row["HuggingFaceID"] == model and row["System"] == system and _matches_filters(row, backend, version)
+        if row["HuggingFaceID"].lower() == model.lower()
+        and row["System"].lower() == system.lower()
+        and _matches_filters(row, backend, version)
     ]
 
     # Resolve architecture from matrix if model is found anywhere
@@ -251,6 +253,8 @@ DefaultHFModels = {
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "nvidia/Qwen3-235B-A22B-NVFP4",
     "Qwen/Qwen3-32B-FP8-Static-PerTensor",
+    # MiniMax Models
+    "MiniMaxAI/MiniMax-M2.5",
     # GPT-OSS Models
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
@@ -268,7 +272,8 @@ SupportedSystems = {
     "h100_sxm",
     "h200_sxm",
     "b200_sxm",
-    "gb200_sxm",
+    "gb200",
+    "gb300",
     "a100_sxm",
     "l40s",
 }
@@ -289,6 +294,7 @@ ARCHITECTURE_TO_MODEL_FAMILY = {
     "MixtralForCausalLM": "MOE",
     "GptOssForCausalLM": "MOE",
     "Qwen3MoeForCausalLM": "MOE",
+    "MiniMaxM2ForCausalLM": "MOE",
 }
 
 """
@@ -511,7 +517,7 @@ class GEMMQuantMode(Enum):
     fp8_ootb = QuantMapping(
         1, 2, "fp8_ootb"
     )  # in future, should deprecate this mode as it's specific for trtllm trt backend
-    nvfp4 = QuantMapping(0.5, 4, "nvfp4")  # nvfp4 on blackwell
+    nvfp4 = QuantMapping(9 / 16, 4, "nvfp4")  # nvfp4 on blackwell. 1 fp8 scale per 16 nvfp4 weights.
 
 
 class MoEQuantMode(Enum):
@@ -524,7 +530,7 @@ class MoEQuantMode(Enum):
     int4_wo = QuantMapping(0.5, 1, "int4_wo")  # w4a16
     fp8_block = QuantMapping(1, 2, "fp8_block")  # specific for trtllm torch ds fp8
     w4afp8 = QuantMapping(0.5, 2, "w4afp8")  # specific for trtllm torch ds w4a8
-    nvfp4 = QuantMapping(0.5, 4, "nvfp4")  # nvfp4 on blackwell
+    nvfp4 = QuantMapping(9 / 16, 4, "nvfp4")  # nvfp4 on blackwell. 1 fp8 scale per 16 nvfp4 weights.
     w4a16_mxfp4 = QuantMapping(0.5, 1, "w4a16_mxfp4")  # native data format for gpt oss
 
 

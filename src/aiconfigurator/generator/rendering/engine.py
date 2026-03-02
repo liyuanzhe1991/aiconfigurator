@@ -31,11 +31,82 @@ _TEMPLATE_ROOT = _CONFIG_DIR / "backend_templates"
 _BACKEND_MAPPING_FILE = str((_CONFIG_DIR / "backend_config_mapping.yaml").resolve())
 
 
+def _generate_k8s_via_dynamo(
+    param_values: dict[str, Any],
+    backend: str,
+    context: dict[str, Any],
+) -> str:
+    """
+    Generate a DynamoGraphDeployment YAML using Dynamo's config modifier system
+    instead of Jinja2 templates.
+
+    This loads a base DGD YAML from Dynamo and injects the pre-computed CLI args,
+    model, image, replicas, and GPU resources that AIC has already calculated.
+
+    Args:
+        param_values: The full AIC parameter dict (ServiceConfig, K8sConfig, params, etc.)
+        backend: Backend name (e.g., 'vllm', 'sglang', 'trtllm')
+        context: The template context dict with pre-computed CLI args and worker info
+
+    Returns:
+        Rendered k8s_deploy.yaml content as a string
+    """
+    # for now, we import the config modifiers from dynamo, will migrate to aiconfigurator later
+    from dynamo.profiler.utils.config_modifiers import CONFIG_MODIFIERS
+
+    modifier = CONFIG_MODIFIERS[backend]
+
+    mode = context.get("DynConfig", {}).get("mode", "disagg")
+    service_cfg = param_values.get("ServiceConfig", {})
+    k8s_cfg = param_values.get("K8sConfig", {})
+
+    kwargs: dict[str, Any] = {
+        "mode": mode,
+        "model_name": service_cfg.get("model_path") or service_cfg.get("served_model_path", ""),
+        "image": k8s_cfg.get("k8s_image", ""),
+        "namespace": k8s_cfg.get("k8s_namespace"),
+    }
+
+    if mode == "disagg":
+        kwargs.update(
+            prefill_cli_args=context.get("prefill_cli_args_list", []),
+            prefill_replicas=int(context.get("prefill_workers", 1)),
+            prefill_gpus=int(context.get("prefill_gpu", 1)),
+            decode_cli_args=context.get("decode_cli_args_list", []),
+            decode_replicas=int(context.get("decode_workers", 1)),
+            decode_gpus=int(context.get("decode_gpu", 1)),
+        )
+    else:
+        kwargs.update(
+            agg_cli_args=context.get("agg_cli_args_list", []),
+            agg_replicas=int(context.get("agg_workers", 1)),
+            agg_gpus=int(context.get("agg_gpu", 1)),
+        )
+
+    # PVC support
+    pvc_name = (k8s_cfg.get("k8s_pvc_name") or k8s_cfg.get("k8s_model_cache") or "").strip()
+    if pvc_name:
+        pvc_mount = (k8s_cfg.get("k8s_pvc_mount_path") or "/workspace/model_cache").strip()
+        model_in_pvc = (
+            k8s_cfg.get("k8s_model_path_in_pvc")
+            or k8s_cfg.get("k8s_pvc_model_path")
+            or k8s_cfg.get("k8s_hf_home")
+            or ""
+        ).strip(" /")
+        kwargs["pvc_name"] = pvc_name
+        kwargs["pvc_mount_path"] = pvc_mount
+        kwargs["model_path"] = f"{pvc_mount}/{model_in_pvc}".rstrip("/") if model_in_pvc else pvc_mount
+
+    config_dict = modifier.build_dgd_config(**kwargs)
+    return yaml.dump(config_dict, sort_keys=False)
+
+
 def render_backend_templates(
     param_values: dict[str, Any],
     backend: str,
     templates_dir: Optional[str] = None,
     version: Optional[str] = None,
+    use_dynamo_generator: bool = False,
 ) -> dict[str, str]:
     """
     Render templates for a specific backend with version-specific template selection.
@@ -259,15 +330,24 @@ def render_backend_templates(
     context["agg_gpu"] = agg_gpu
 
     # Render auxiliary templates (k8s deploy, benchmark, and run script)
+
     # k8s deploy: single file
-    k8s_aux = template_path / "k8s_deploy.yaml.j2"
-    if k8s_aux.exists():
+    if use_dynamo_generator:
+        # use dynamo planner profiler's config generator to generate k8s config
         try:
-            tmpl = env.get_template("k8s_deploy.yaml.j2")
-            rendered = tmpl.render(**context)
-            rendered_templates["k8s_deploy.yaml"] = rendered
+            rendered_templates["k8s_deploy.yaml"] = _generate_k8s_via_dynamo(param_values, backend, context)
         except Exception as e:
-            logger.warning(f"Failed to render template k8s_deploy.yaml.j2: {e}")
+            logger.warning(f"Failed to generate k8s config via Dynamo: {e}")
+    else:
+        # use the j2 templates in AIC to generate k8s config
+        k8s_aux = template_path / "k8s_deploy.yaml.j2"
+        if k8s_aux.exists():
+            try:
+                tmpl = env.get_template("k8s_deploy.yaml.j2")
+                rendered = tmpl.render(**context)
+                rendered_templates["k8s_deploy.yaml"] = rendered
+            except Exception as e:
+                logger.warning(f"Failed to render template k8s_deploy.yaml.j2: {e}")
 
     # benchmark job: single file from shared benchmark template folder
     bench_dir = _TEMPLATE_ROOT / "benchmark"
@@ -466,8 +546,19 @@ def prepare_template_context(param_values: dict[str, Any], backend: str) -> dict
     context["k8s_image_pull_secret"] = k8s_config.get("k8s_image_pull_secret")
     context["working_dir"] = k8s_config.get("working_dir")
     context["k8s_engine_mode"] = k8s_config.get("k8s_engine_mode")
-    context["k8s_model_cache"] = k8s_config.get("k8s_model_cache")
-    context["k8s_hf_home"] = k8s_config.get("k8s_hf_home")
+    # PVC config: new unified names with backward compat fallbacks
+    context["k8s_pvc_name"] = k8s_config.get("k8s_pvc_name") or k8s_config.get("k8s_model_cache")
+    context["k8s_pvc_mount_path"] = k8s_config.get("k8s_pvc_mount_path") or "/workspace/model_cache"
+    context["k8s_model_path_in_pvc"] = (
+        k8s_config.get("k8s_model_path_in_pvc") or k8s_config.get("k8s_pvc_model_path") or k8s_config.get("k8s_hf_home")
+    )
+    # Backward compat aliases for Jinja2 templates
+    context["k8s_model_cache"] = context["k8s_pvc_name"]
+    context["k8s_hf_home"] = (
+        f"{context['k8s_pvc_mount_path']}/{context['k8s_model_path_in_pvc']}".rstrip("/")
+        if context["k8s_model_path_in_pvc"]
+        else ""
+    )
 
     # Extract DynConfig for mode/router decisions
     dyn_config = param_values.get("DynConfig", {})

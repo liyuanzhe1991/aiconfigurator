@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import fcntl
+import csv
 import heapq
 import json
 import logging
@@ -627,36 +627,70 @@ def log_perf(
     op_name: str,
     kernel_source: str,
     perf_filename: str,
-    power_stats: dict | None = None,  # NEW PARAMETER
+    power_stats: dict | None = None,
 ):
-    """
-    Log performance data to a CSV file with file locking.
+    lock_file = perf_filename + ".lock"
 
-    WARNING: fcntl.flock() advisory locks do NOT work reliably on NFS/shared
-    filesystems. If your output file is on NFS, workers may deadlock.
-    Use local filesystem paths (e.g., /tmp/) for output files instead.
-    """
-    content_prefix = f"{framework},{version},{device_name},{op_name},{kernel_source}"
-    header_prefix = "framework,version,device,op_name,kernel_source"
-    for item in item_list:
-        for key, value in item.items():
-            content_prefix += f",{value}"
-            header_prefix += f",{key}"
+    # Try for 1 sec (10 * 0.1s)
+    got_lock = False
+    for _ in range(10):
+        try:
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            got_lock = True
+            break
+        except OSError:
+            time.sleep(0.1)
 
-    # Add power stats only if power measurement was enabled
-    if power_stats:
-        for key in ["power", "power_limit"]:
-            value = power_stats.get(key, "")
-            content_prefix += f",{value}"
-            header_prefix += f",{key}"
+    if not got_lock:
+        print(f"Skipping log: can not get lock for {perf_filename}")
+        return
 
-    with open(perf_filename, "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    try:
+        with open(perf_filename, "a", newline="") as f:
+            # Add header only if file is empty
+            is_empty = os.fstat(f.fileno()).st_size == 0
 
-        if os.fstat(f.fileno()).st_size == 0:
-            f.write(header_prefix + "\n")
+            base_data = {
+                "framework": framework,
+                "version": version,
+                "device": device_name,
+                "op_name": op_name,
+                "kernel_source": kernel_source,
+            }
 
-        f.write(content_prefix + "\n")
+            # Get headers from first item if exists
+            fieldnames = list(base_data.keys())
+            if item_list:
+                fieldnames += list(item_list[0].keys())
+            # Add power_stats keys if present
+            if power_stats:
+                for key in ["power", "power_limit"]:
+                    if key not in fieldnames:
+                        fieldnames.append(key)
+
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+
+            if is_empty:
+                writer.writeheader()
+
+            for item in item_list:
+                row = base_data | item
+                # Add power_stats values if present
+                if power_stats:
+                    for key in ["power", "power_limit"]:
+                        row[key] = power_stats.get(key, "")
+                writer.writerow(row)
+
+            # Force disk write (for NFS)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception as e:
+        print(f"Error writing log: {e}")
+    finally:
+        # Delete the lock file, even if writing crashed
+        if got_lock and os.path.exists(lock_file):
+            os.unlink(lock_file)
 
 
 # Helper functions for MoE
@@ -664,16 +698,15 @@ def balanced_logits(num_tokens, num_experts, topk):
     import torch
     import torch.nn.functional as F
 
-    # h_selected_experts = -torch.ones([num_tokens, topk]).to(torch.device(device))
-    h_selected_experts = -torch.ones([num_tokens, topk])
     stride = math.ceil(num_experts / topk)
 
-    for token_i in range(num_tokens):
-        for i in range(topk):
-            if num_tokens >= stride:
-                h_selected_experts[token_i][i] = (token_i + i * stride) % num_experts
-            else:
-                h_selected_experts[token_i][i] = (token_i * stride / num_tokens + i * stride) % num_experts
+    token_indices = torch.arange(num_tokens).unsqueeze(1)  # [num_tokens, 1]
+    topk_indices = torch.arange(topk).unsqueeze(0)  # [1, topk]
+
+    if num_tokens >= stride:
+        h_selected_experts = (token_indices + topk_indices * stride) % num_experts
+    else:
+        h_selected_experts = (token_indices * stride / num_tokens + topk_indices * stride) % num_experts
 
     expert_map = F.one_hot(h_selected_experts.long(), num_classes=num_experts).sum(1)
     router_logits = F.softmax(expert_map.bfloat16(), dim=1)
@@ -898,6 +931,32 @@ def compute_eplb(
     }
 
 
+def _assign_experts_from_counts(num_tokens_per_expert, num_tokens, topk):
+    """Vectorized expert-to-token assignment from per-expert counts.
+
+    Uses column-major fill: sort experts descending by count, repeat each expert
+    by its count into a flat array, then reshape as (topk, num_tokens).T.
+
+    Example: num_tokens = 5, topk = 2, num_tokens_per_expert = [4, 1, 3, 2]
+    Then expert_ids_flat = [0, 0, 0, 0, 2, 2, 2, 3, 3, 1]
+    and h_selected = [[0, 2],
+                      [0, 2],
+                      [0, 3],
+                      [0, 3],
+                      [2, 1]]
+    Notice that there are no duplicate experts in any row.
+    """
+    import numpy as np
+    import torch
+
+    counts = num_tokens_per_expert.cpu().numpy().astype(np.int64)
+    sorted_experts = np.argsort(-counts)
+    sorted_counts = counts[sorted_experts]
+    expert_ids_flat = np.repeat(sorted_experts, sorted_counts)
+    h_selected = expert_ids_flat.reshape(topk, num_tokens).T.copy()
+    return torch.from_numpy(h_selected)
+
+
 def _generate_power_law_distribution(num_tokens, num_experts, topk, ep, alpha):
     """Core function to generate power law token distribution across experts.
 
@@ -1003,25 +1062,8 @@ def _generate_power_law_distribution(num_tokens, num_experts, topk, ep, alpha):
     if aic_debug >= 1:
         print("num_tokens_per_expert", num_tokens_per_expert, num_tokens_per_expert.sum().item())
 
-    # Generate expert assignments
-    # Ensure each token selects topk distinct experts
-    # Greedy assignment: prioritize experts with highest demand
-
-    h_selected_experts = torch.zeros((num_tokens, topk), dtype=torch.int64)
-    remaining = num_tokens_per_expert.clone()  # remaining demand per expert
-
-    for token_id in range(num_tokens):
-        # Select the top-k experts with the highest remaining demand
-        _, top_experts = torch.topk(remaining, topk)
-        h_selected_experts[token_id] = top_experts
-        # Decrease the remaining demand for the selected experts
-        remaining[top_experts] -= 1
-
-    # Verify: check if all demands are satisfied
-    if remaining.sum() != 0:
-        aic_debug = int(os.getenv("AIC_DEBUG", "0"))
-        if aic_debug >= 1:
-            print(f"Warning: Expert assignment incomplete: remaining sum = {remaining.sum().item()}")
+    # Generate expert assignments (vectorized)
+    h_selected_experts = _assign_experts_from_counts(num_tokens_per_expert, num_tokens, topk)
 
     return num_tokens_per_expert, h_selected_experts
 
@@ -1182,21 +1224,7 @@ def _generate_power_law_distribution_with_eplb(num_tokens, num_experts, topk, ep
             f"num_tokens={num_tokens}, topk={topk}, num_slots={num_slots}"
         )
 
-    h_selected_slots = torch.zeros((num_tokens, topk), dtype=torch.int64)
-    remaining = num_tokens_per_slot.clone().float()
-
-    for token_id in range(num_tokens):
-        # Select topk slots with highest remaining demand
-        _, top_slots = torch.topk(remaining, topk)
-        h_selected_slots[token_id] = top_slots
-        remaining[top_slots] -= 1
-
-    # Verify: remaining should be all zeros (or very close due to float precision)
-    if remaining.abs().max().item() != 0:
-        raise ValueError(
-            f"Slot assignment incomplete: remaining max={remaining.max().item()}, "
-            f"min={remaining.min().item()}, sum={remaining.sum().item()}"
-        )
+    h_selected_slots = _assign_experts_from_counts(num_tokens_per_slot, num_tokens, topk)
 
     return num_tokens_per_slot, h_selected_slots
 

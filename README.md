@@ -5,6 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # aiconfigurator
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ai-dynamo/aiconfigurator)
+
 In disaggregated serving, configuring an effective deployment is challenging: you need to decide how many prefill and decode
 workers to run, and the parallelism for each worker. Combined with SLA targets for TTFT (Time to First Token) and
 TPOT (Time per Output Token), optimizing throughput at a given latency becomes even more complex.
@@ -88,6 +90,8 @@ aiconfigurator cli support --model-path Qwen/Qwen3-32B-FP8 --system h200_sxm
 Quantization defaults are inferred from the Hugging Face model config (`config.json` plus optional `hf_quant_config.json`).  
 For low-precision models, use a quantized HF ID (for example, `Qwen/Qwen3-32B-FP8`) or a local model directory containing those files.  
 Any quantization set via `profiles` or YAML `config` overrides the HF defaults.
+
+For a full end-to-end walkthrough (support check, sweep, deploy, benchmark), see the [CLI User Guide -- End-to-End Workflow](docs/cli_user_guide.md#end-to-end-workflow).
 
 Refer to [CLI User Guide](docs/cli_user_guide.md)
 
@@ -248,6 +252,8 @@ results/QWEN3_32B_FP8_h200_sxm_trtllm_isl4000_osl1000_ttft1000_tpot20_904495
 │   ├── top1
 │   │   ├── agg
 │   │   │   ├── agg_config.yaml
+│   │   │   ├── bench_run.sh          # aiperf benchmark sweep script (bare-metal)
+│   │   │   ├── k8s_bench.yaml        # aiperf benchmark sweep Job (Kubernetes)
 │   │   │   ├── k8s_deploy.yaml
 │   │   │   └── node_0_run.sh 
 │   │   └── generator_config.yaml
@@ -258,7 +264,9 @@ results/QWEN3_32B_FP8_h200_sxm_trtllm_isl4000_osl1000_ttft1000_tpot20_904495
 │   ├── pareto.csv
 │   ├── top1
 │   │   ├── disagg
+│   │   │   ├── bench_run.sh          # aiperf benchmark sweep script (bare-metal)
 │   │   │   ├── decode_config.yaml
+│   │   │   ├── k8s_bench.yaml        # aiperf benchmark sweep Job (Kubernetes)
 │   │   │   ├── k8s_deploy.yaml
 │   │   │   ├── node_0_run.sh
 │   │   │   └── prefill_config.yaml
@@ -370,7 +378,7 @@ To go through the process, refer to the [guidance](collector/README.md) under th
 | h100_sxm | TRTLLM(1.0.0rc3, 1.2.0rc5), SGLang(0.5.6.post2), vLLM(0.12.0) | ✅ |
 | h200_sxm | TRTLLM(1.0.0rc3, 1.2.0rc5), SGLang(0.5.6.post2), vLLM(0.12.0) | ✅ |
 | b200_sxm | TRTLLM(1.0.0rc3, 1.2.0rc5), SGLang(0.5.6.post2) | ✅ |
-| gb200_sxm | TRTLLM(1.0.0rc3, 1.2.0rc5) | ✅ |
+| gb200 | TRTLLM(1.0.0rc3, 1.2.0rc5) | ✅ |
 | a100_sxm | TRTLLM(1.0.0), vLLM(0.12.0) | ✅ |
 (last updated: 2026/02/02)
 

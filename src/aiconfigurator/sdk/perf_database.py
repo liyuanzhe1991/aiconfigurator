@@ -50,11 +50,39 @@ def set_systems_paths(raw_paths: str | Iterable[str] | None) -> None:
     Override the system search paths for the current process.
     """
     global _SYSTEMS_PATHS
-    _SYSTEMS_PATHS = _normalize_systems_paths(raw_paths)
+    resolved_paths = _normalize_systems_paths(raw_paths)
+    invalid_paths = [path for path in resolved_paths if not os.path.isdir(path)]
+    if invalid_paths:
+        raise ValueError(
+            "Invalid --systems-paths: each entry must be an existing directory. "
+            f"Invalid entries: {', '.join(invalid_paths)}"
+        )
+    _SYSTEMS_PATHS = resolved_paths
 
 
 def get_systems_paths() -> list[str]:
     return list(_SYSTEMS_PATHS)
+
+
+def build_no_databases_message() -> str:
+    """Build a concise error message for systems path/db validation failures."""
+    resolved_paths = get_systems_paths()
+    resolved_display = ", ".join(resolved_paths) if resolved_paths else "<none>"
+    default_path = os.fspath(pkg_resources.files("aiconfigurator") / "systems")
+    has_default = default_path in resolved_paths
+
+    lines = [
+        "No loadable performance databases found under --systems-paths.",
+        f"Configured systems paths: {resolved_display}",
+    ]
+    if has_default:
+        lines.append(
+            "Built-in `default` systems path is already included, and no databases "
+            "could be loaded from either default or extra paths."
+        )
+    else:
+        lines.append("Tip: try adding `default` to --systems-paths and run again.")
+    return "\n".join(lines)
 
 
 class PerfDataNotAvailableError(RuntimeError):
@@ -234,7 +262,7 @@ def get_database(
             database = databases_cache[cache_key][backend][version]
             return database
         except KeyError:
-            logger.info(f"loading {system=}, {backend=}, {version=}")
+            logger.info(f"Loading database for {system=}, {backend=}, {version=}")
             try:
                 with open(system_yaml_path) as f:
                     system_spec = yaml.load(f, Loader=yaml.SafeLoader)
@@ -3908,13 +3936,9 @@ class PerfDatabase:
             v_head_dim = 128
             num_head = 128 // tp_size
 
-            # qkv_a projection (decode mode)
-            qkv_a_flop = 2 * hidden_size * (q_lora_rank + kv_lora_rank + qk_rope_head_dim) * b
-            qkv_a_mem = (
-                b * hidden_size
-                + hidden_size * (q_lora_rank + kv_lora_rank + qk_rope_head_dim)
-                + 2 * b * (q_lora_rank + kv_lora_rank + qk_rope_head_dim)
-            )
+            # NOTE: qkv_a projection is now modeled as a standalone GEMM op
+            # (generation_qkv_a_proj_gemm) outside of the MLA attention forward path,
+            # matching sglang >=0.5.6 where qkv_a_proj was moved out of attention.
 
             # q_b projection
             q_b_flop = 2 * q_lora_rank * num_head * (qk_rope_head_dim + qk_nope_head_dim) * b
@@ -3949,10 +3973,8 @@ class PerfDatabase:
             attn_out_flop = 2 * num_head * v_head_dim * hidden_size * b
             attn_out_mem = b * num_head * v_head_dim + num_head * v_head_dim * hidden_size + 2 * b * hidden_size
 
-            ops = qkv_a_flop + q_b_flop + q_w_kc_flop + s_w_vc_flop + attn_out_flop
-            mem_bytes = (
-                qkv_a_mem + q_b_mem + q_w_kc_mem + attn_mem * 2 + s_w_vc_mem + attn_out_mem
-            ) * fmha_quant_mode.value.memory
+            ops = q_b_flop + q_w_kc_flop + s_w_vc_flop + attn_out_flop
+            mem_bytes = (q_b_mem + q_w_kc_mem + attn_mem * 2 + s_w_vc_mem + attn_out_mem) * fmha_quant_mode.value.memory
             sol_math = ops / (self.system_spec["gpu"]["float16_tc_flops"] * fmha_quant_mode.value.compute) * 1000
             sol_math += attn_flop / (self.system_spec["gpu"]["float16_tc_flops"]) * 1000
             sol_mem = mem_bytes / self.system_spec["gpu"]["mem_bw"] * 1000
@@ -4049,13 +4071,8 @@ class PerfDatabase:
             v_head_dim = 128
             num_head = 128 // tp_size
 
-            # qkv_a projection (prefill mode)
-            qkv_a_flop = 2 * hidden_size * (q_lora_rank + kv_lora_rank + qk_rope_head_dim) * b * s
-            qkv_a_mem = (
-                b * hidden_size * s
-                + hidden_size * (q_lora_rank + kv_lora_rank + qk_rope_head_dim)
-                + 2 * b * (q_lora_rank + kv_lora_rank + qk_rope_head_dim) * s
-            )
+            # NOTE: qkv_a projection is now modeled as a standalone GEMM op in the pipeline
+            # (context_qkv_a_proj_gemm), so it is excluded from this SOL calculation.
 
             # q_b projection
             q_b_flop = 2 * q_lora_rank * num_head * (qk_rope_head_dim + qk_nope_head_dim) * b * s
@@ -4089,8 +4106,8 @@ class PerfDatabase:
             attn_out_flop = 2 * num_head * v_head_dim * hidden_size * b * s
             attn_out_mem = b * num_head * v_head_dim * s + num_head * v_head_dim * hidden_size + 2 * b * hidden_size * s
 
-            ops = qkv_a_flop + q_b_flop + kv_b_flop + attn_out_flop
-            mem_bytes = (qkv_a_mem + q_b_mem + kv_b_mem + attn_mem * 2 + attn_out_mem) * fmha_quant_mode.value.memory
+            ops = q_b_flop + kv_b_flop + attn_out_flop
+            mem_bytes = (q_b_mem + kv_b_mem + attn_mem * 2 + attn_out_mem) * fmha_quant_mode.value.memory
             sol_math = ops / (self.system_spec["gpu"]["float16_tc_flops"] * fmha_quant_mode.value.compute) * 1000
             sol_math += attn_flop / (self.system_spec["gpu"]["float16_tc_flops"]) * 1000
             sol_mem = mem_bytes / self.system_spec["gpu"]["mem_bw"] * 1000
