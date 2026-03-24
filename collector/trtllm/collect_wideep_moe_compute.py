@@ -987,7 +987,7 @@ def run_wideep_moe_compute(
         if num_tokens > max_tokens:
             continue
 
-        num_iter = 20 if distributed == "power_law" else 1
+        num_iter = int(os.getenv("AIC_NUM_ITER", "20")) if distributed == "power_law" else 1
 
         # In WideEP, DP size = EP size, each DP rank has num_tokens/ep_size tokens
         dp_num_tokens = num_tokens if num_tokens < moe_ep_size else num_tokens // moe_ep_size
