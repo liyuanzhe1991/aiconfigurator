@@ -1348,7 +1348,7 @@ def _generate_power_law_distribution_with_ema_eplb(
     if use_dirichlet:
         # Build normalized power-law probability vector π
         raw = sample_power_law(num_experts, alpha, 1, num_tokens * 0.8)
-        pi_np = raw.numpy().astype(np.float64)
+        pi_np = raw.cpu().numpy().astype(np.float64)
         pi_np = pi_np / pi_np.sum()
     else:
         # Legacy: generate base_profile for lognormal noise

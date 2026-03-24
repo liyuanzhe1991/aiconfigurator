@@ -69,10 +69,10 @@ aic_debug = int(os.getenv("AIC_MOE_DEBUG", "0"))
 # AIC_ACCURATE_WIDEEP_SIM=0: Simple mode - all tokens directly
 aic_accurate_wideep_sim = os.getenv("AIC_ACCURATE_WIDEEP_SIM", "1") == "1"
 
-aic_eplb_ema_warmup_steps = int(os.getenv("AIC_EPLB_EMA_WARMUP_STEPS", "0"))
+aic_eplb_ema_warmup_steps = int(os.getenv("AIC_EPLB_EMA_WARMUP_STEPS", "10"))
 aic_eplb_ema_decay_factor = float(os.getenv("AIC_EPLB_EMA_DECAY_FACTOR", "0.95"))
 aic_eplb_ema_noise_sigma = float(os.getenv("AIC_EPLB_EMA_NOISE_SIGMA", "0.3"))
-aic_dirichlet_concentration = int(os.getenv("AIC_DIRICHLET_CONCENTRATION", "0"))
+aic_dirichlet_concentration = int(os.getenv("AIC_DIRICHLET_CONCENTRATION", "200"))
 
 moe_tune_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wideep_moe_compute_tuned_cache_path")
 
