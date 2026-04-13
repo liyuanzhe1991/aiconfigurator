@@ -1,2 +1,5 @@
 src/aiconfigurator/systems/**/*.txt filter=lfs diff=lfs merge=lfs -text
 ATTRIBUTIONS.md filter=lfs diff=lfs merge=lfs -text
+src/aiconfigurator/systems/data/h20_sxm/ filter=lfs diff=lfs merge=lfs -text
+batch_info/qwen3-235B-A22B/ep_tp/TP0-EP0_schedule_batch.jsonl filter=lfs diff=lfs merge=lfs -text
+ShareGPT_V3_unfiltered_cleaned_split.json filter=lfs diff=lfs merge=lfs -text

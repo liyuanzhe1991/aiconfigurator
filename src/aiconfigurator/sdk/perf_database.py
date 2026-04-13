@@ -2540,6 +2540,11 @@ class PerfDatabase:
                     262144,
                 ]  # to fit vocab gemm
                 target_z_list = target_y_list
+                
+                # mry debug for qwen3-235B
+                target_y_list = list(set(target_y_list + [18992, 1280]))
+                target_z_list = list(set(target_z_list + [151936]))
+                
                 self._extrapolate_data_grid(
                     data_dict=data_dict,
                     target_x_list=target_x_list,
@@ -3827,7 +3832,16 @@ class PerfDatabase:
                     result = self._interp_1d([m_left, m_right], [gemm_data[m_left][n][k], gemm_data[m_right][n][k]], m)
                     return _to_performance_result(result)
 
-                result = self._interp_3d(m, n, k, gemm_data, "cubic")
+                # mry debug
+                print("m, n, k:", m, n, k)
+                if n == 18992:
+                    result = self._interp_3d(m, 16384, k, gemm_data, "cubic")
+                elif n == 1280:
+                    result = self._interp_3d(m, 1536, k, gemm_data, "cubic")
+                else:
+                    result = self._interp_3d(m, n, k, gemm_data, "cubic")
+
+                # result = self._interp_3d(m, n, k, gemm_data, "cubic")
                 return _to_performance_result(result)
 
             return self._query_silicon_or_hybrid(
@@ -6000,7 +6014,9 @@ class PerfDatabase:
         elif database_mode == common.DatabaseMode.EMPIRICAL:
             return PerformanceResult(get_empirical(num_tokens, topk, num_experts), energy=0.0)
         else:
-            data = self._wideep_deepep_ll_data[node_num][hidden_size][topk][num_experts]
+            # mry debug
+            # data = self._wideep_deepep_ll_data[node_num][hidden_size][topk][num_experts]
+            data = self._wideep_deepep_ll_data[node_num][7168][topk][256] # TODO: fix
             num_left, num_right = self._nearest_1d_point_helper(num_tokens, list(data.keys()), inner_only=False)
             result = self._interp_1d([num_left, num_right], [data[num_left], data[num_right]], num_tokens)
             lat = result["latency"] if isinstance(result, dict) else result
@@ -6040,7 +6056,9 @@ class PerfDatabase:
             return PerformanceResult(get_empirical(num_tokens, num_experts, topk, hidden_size), energy=0.0)
         else:
             if node_num == 1 and sms == 20:  # only collect sm=20 for now
-                data = self._wideep_deepep_normal_data[node_num][hidden_size][topk][num_experts][sms]
+                # mry debug
+                # data = self._wideep_deepep_normal_data[node_num][hidden_size][topk][num_experts][sms]
+                data = self._wideep_deepep_normal_data[node_num][7168][topk][256][sms] # TODO: fix
                 num_left, num_right = self._nearest_1d_point_helper(num_tokens, list(data.keys()), inner_only=False)
                 result = self._interp_1d([num_left, num_right], [data[num_left], data[num_right]], num_tokens)
                 lat = result["latency"] if isinstance(result, dict) else result
