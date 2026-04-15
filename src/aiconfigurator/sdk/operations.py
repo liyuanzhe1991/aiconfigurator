@@ -721,7 +721,7 @@ class MoEDispatch(Operation):
                 comm_latency += database.query_nccl(
                     common.CommQuantMode.half,
                     self.num_gpus,
-                    "all_gather" if self._pre_dispatch else "reduce_scatter",
+                    "vllm_dp_dispatch" if self._pre_dispatch else "vllm_dp_combine",
                     volume * self._attention_dp_size,
                 )
         elif database.backend == common.BackendName.sglang.value:
