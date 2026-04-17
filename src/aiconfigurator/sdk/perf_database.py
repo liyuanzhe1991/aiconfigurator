@@ -4714,6 +4714,28 @@ class PerfDatabase:
         elif database_mode == common.DatabaseMode.EMPIRICAL:
             return PerformanceResult(get_empirical(dtype, num_gpus, operation, message_size), energy=0.0)
         else:
+            # Backward-compat: fall back to legacy op_names when new vLLM op_names
+            # are absent from nccl_perf.txt (e.g. data not yet collected for this
+            # system). Covers SILICON mode for users who upgrade code without
+            # refreshing data. HYBRID already falls back to EMPIRICAL on exception.
+            _legacy_fallback = {
+                "vllm_dp_dispatch": "all_gather",
+                "vllm_dp_combine": "reduce_scatter",
+            }
+            resolved_op = operation
+            if (
+                operation in _legacy_fallback
+                and self._nccl_data is not None
+                and self._nccl_data.data is not None
+                and not self._nccl_data[dtype][operation]
+                and self._nccl_data[dtype][_legacy_fallback[operation]]
+            ):
+                logger.warning(
+                    f"nccl op '{operation}' not in database; falling back to "
+                    f"'{_legacy_fallback[operation]}' (run collect_vllm_nccl.py for accurate values)"
+                )
+                resolved_op = _legacy_fallback[operation]
+
             # SILICON or HYBRID mode - use database
             def get_silicon():
                 if num_gpus == 1:
@@ -4721,8 +4743,8 @@ class PerfDatabase:
 
                 self._nccl_data.raise_if_not_loaded()
 
-                max_num_gpus = max(self._nccl_data[dtype][operation].keys())
-                nccl_dict = self._nccl_data[dtype][operation][min(num_gpus, max_num_gpus)]
+                max_num_gpus = max(self._nccl_data[dtype][resolved_op].keys())
+                nccl_dict = self._nccl_data[dtype][resolved_op][min(num_gpus, max_num_gpus)]
                 size_left, size_right = self._nearest_1d_point_helper(
                     message_size,
                     list(nccl_dict.keys()),
