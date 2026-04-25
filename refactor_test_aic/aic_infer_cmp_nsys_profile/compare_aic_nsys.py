@@ -53,6 +53,8 @@ KERNEL_CLASSIFY_RULES: List[Tuple[str, str]] = [
     ("FlashAttnFwd", "attention"),
     ("FlashAttnBwd", "attention"),
     ("flash::prepare_varlen", "attention"),
+    ("sparse_attn_fwd_kernel", "attention"),
+    ("sparse_attn", "attention"),
     ("fused_qknorm", "attention"),
     ("fused_rope_store", "attention"),
     ("masked_fill_kernel", "attention"),
@@ -329,6 +331,33 @@ def _load_nvtx_ranges(conn: sqlite3.Connection, forward_mode_filter: Optional[st
     return ranges
 
 
+def _group_overlapping_nvtx_ranges(nvtx_ranges: List[dict]) -> List[dict]:
+    """Group per-rank Scheduler.run_batch ranges into logical iterations."""
+    groups = []
+    for r in sorted(nvtx_ranges, key=lambda x: (x["start"], x["end"])):
+        if not groups or r["start"] > groups[-1]["end"]:
+            groups.append({
+                "start": r["start"],
+                "end": r["end"],
+                "text": r["text"],
+                "texts": [r["text"]],
+                "range_durations_ms": [r["dur_ms"]],
+                "rank_range_count": 1,
+            })
+            continue
+
+        g = groups[-1]
+        g["start"] = min(g["start"], r["start"])
+        g["end"] = max(g["end"], r["end"])
+        g["texts"].append(r["text"])
+        g["range_durations_ms"].append(r["dur_ms"])
+        g["rank_range_count"] += 1
+
+    for g in groups:
+        g["dur_ms"] = (g["end"] - g["start"]) / 1e6
+    return groups
+
+
 def _load_kernels_in_range(
     conn: sqlite3.Connection, range_start: int, range_end: int, device_id: int = 0
 ) -> List[dict]:
@@ -404,7 +433,9 @@ def extract_nsys_per_op(
     sqlite_path: str,
     iter_index: Optional[int] = None,
     is_decode: bool = False,
+    device_id: int = 0,
     multi_rank: bool = False,
+    tail_window_ms: Optional[float] = None,
 ) -> Tuple[Dict[str, float], dict]:
     """
     从 nsys sqlite 提取 per-op 时延汇总。
@@ -416,20 +447,31 @@ def extract_nsys_per_op(
     """
     conn = sqlite3.connect(sqlite_path)
 
-    forward_mode = "DECODE" if is_decode else None
+    forward_mode = "DECODE" if is_decode else "EXTEND"
     nvtx_ranges = _load_nvtx_ranges(conn, forward_mode_filter=forward_mode)
     if not nvtx_ranges:
         raise ValueError("No Scheduler.run_batch NVTX ranges found")
 
-    num_iters = len(nvtx_ranges)
-    selected_idx, selected_range = _select_iteration(nvtx_ranges, iter_index)
-    print(f"[nsys] {num_iters} iterations found, using iter #{selected_idx} "
+    logical_iters = _group_overlapping_nvtx_ranges(nvtx_ranges)
+    num_iters = len(logical_iters)
+    selected_idx, selected_range = _select_iteration(logical_iters, iter_index)
+    analysis_range = dict(selected_range)
+    if tail_window_ms is not None:
+        tail_ns = int(tail_window_ms * 1e6)
+        analysis_range["start"] = max(selected_range["start"], selected_range["end"] - tail_ns)
+        analysis_range["end"] = selected_range["end"]
+        analysis_range["dur_ms"] = (analysis_range["end"] - analysis_range["start"]) / 1e6
+
+    print(f"[nsys] {num_iters} logical iteration(s) found, using iter #{selected_idx} "
           f"(dur={selected_range['dur_ms']:.3f}ms)")
+    print(f"[nsys] grouped {selected_range.get('rank_range_count', 1)} rank range(s)")
+    if tail_window_ms is not None:
+        print(f"[nsys] analyzing tail window: {analysis_range['dur_ms']:.3f}ms "
+              f"of selected NVTX range")
     print(f"[nsys] NVTX: {selected_range['text'][:120]}")
 
-    # 主 device (device 0) 分类
-    kernels = _load_kernels_in_range(conn, selected_range["start"], selected_range["end"], device_id=0)
-    print(f"[nsys] {len(kernels)} kernels in selected iteration (device 0)")
+    kernels = _load_kernels_in_range(conn, analysis_range["start"], analysis_range["end"], device_id=device_id)
+    print(f"[nsys] {len(kernels)} kernels in selected iteration (device {device_id})")
 
     need_per_layer = multi_rank
     per_op_totals, num_layers, layer_details_d0 = _classify_all_kernels(kernels, per_layer_detail=need_per_layer)
@@ -438,7 +480,7 @@ def extract_nsys_per_op(
     # 多 rank MoE 对齐
     if multi_rank and num_layers > 0:
         per_op_totals = _aggregate_multi_rank_moe(
-            conn, selected_range, per_op_totals, num_layers, layer_details_d0
+            conn, analysis_range, per_op_totals, num_layers, layer_details_d0, device_id
         )
 
     conn.close()
@@ -446,9 +488,14 @@ def extract_nsys_per_op(
     meta = {
         "num_iters": num_iters,
         "selected_iter": selected_idx,
-        "total_dur_ms": selected_range["dur_ms"],
+        "total_dur_ms": analysis_range["dur_ms"],
+        "analysis_dur_ms": analysis_range["dur_ms"],
+        "nvtx_dur_ms": selected_range["dur_ms"],
+        "tail_window_ms": tail_window_ms,
         "num_layers": num_layers,
         "num_kernels": len(kernels),
+        "device_id": device_id,
+        "rank_range_count": selected_range.get("rank_range_count", 1),
         "multi_rank": multi_rank,
     }
     return dict(per_op_totals), meta
@@ -460,6 +507,7 @@ def _aggregate_multi_rank_moe(
     base_totals: Dict[str, float],
     num_layers: int,
     layer_details_d0: List[dict],
+    base_device_id: int = 0,
 ) -> Dict[str, float]:
     """
     跨所有 rank 做 MoE 负载均衡对齐。
@@ -480,9 +528,9 @@ def _aggregate_multi_rank_moe(
     print(f"[multi-rank] {len(all_devices)} devices detected, aggregating MoE across ranks...")
 
     # 收集每个 device 的逐层 MoE 明细
-    all_layer_details = {0: layer_details_d0}
+    all_layer_details = {base_device_id: layer_details_d0}
     for dev in all_devices:
-        if dev == 0:
+        if dev == base_device_id:
             continue
         kernels_dev = _load_kernels_in_range(
             conn, selected_range["start"], selected_range["end"], device_id=dev
@@ -500,7 +548,7 @@ def _aggregate_multi_rank_moe(
     old_post_dispatch_total = base_totals.get("moe_post_dispatch", 0.0)
 
     for layer_idx in range(num_layers):
-        best_dev = 0
+        best_dev = base_device_id
         best_moe = layer_details_d0[layer_idx]["moe"]
 
         for dev, details in all_layer_details.items():
@@ -549,8 +597,25 @@ def get_aic_per_op(data_dir: str, case_id: int) -> Tuple[Dict[str, float], float
 
 
 def _prepare_aic_dict(aic_dict: Dict[str, float], is_decode: bool) -> Dict[str, float]:
-    """准备 AIC dict 用于对比（直接透传，不再合并 dispatch）。"""
-    return dict(aic_dict)
+    """准备 AIC dict 用于对齐当前 nsys 分类桶。"""
+    merged = dict(aic_dict)
+    prefix = "generation_" if is_decode else "context_"
+
+    # nsys FFN window classifier puts all GEMMs between pre/post dispatch into
+    # router_gemm, which includes GLM shared-expert dense GEMMs.
+    dense_ffn_ms = 0.0
+    for name in (f"{prefix}shared_gate_up_gemm", f"{prefix}shared_ffn2_gemm"):
+        dense_ffn_ms += merged.pop(name, 0.0)
+    if dense_ffn_ms:
+        merged[f"{prefix}router_gemm"] = merged.get(f"{prefix}router_gemm", 0.0) + dense_ffn_ms
+
+    # The shared expert activation is classified by kernel name as part of the
+    # nsys moe bucket.
+    shared_act_ms = merged.pop(f"{prefix}shared_act_gate", 0.0)
+    if shared_act_ms:
+        merged[f"{prefix}moe"] = merged.get(f"{prefix}moe", 0.0) + shared_act_ms
+
+    return merged
 
 
 def print_comparison(
@@ -566,13 +631,19 @@ def print_comparison(
     aic_merged = _prepare_aic_dict(aic_dict, is_decode)
 
     prefix = "generation_" if is_decode else "context_"
+    merge_attention_module = (
+        f"{prefix}attention" in aic_merged
+        and f"{prefix}qkv_gemm" not in aic_merged
+        and f"{prefix}proj_gemm" not in aic_merged
+    )
 
     print()
     print("=" * 100)
     print(f"  AIC per-op 预估 vs nsys 实测 kernel 时延对比")
     print(f"  (nsys iter #{nsys_meta['selected_iter']}, "
           f"{nsys_meta['num_layers']} layers, "
-          f"{nsys_meta['num_kernels']} kernels)")
+          f"{nsys_meta['num_kernels']} kernels, "
+          f"device {nsys_meta.get('device_id', 0)})")
     print("=" * 100)
     print(f"{'AIC Op':<42s} {'AIC (ms)':>10s} {'nsys (ms)':>10s} {'Diff (ms)':>10s} {'Err%':>8s}")
     print("-" * 100)
@@ -580,10 +651,21 @@ def print_comparison(
     aic_total = 0.0
     nsys_total = 0.0
     rows = []
+    matched_aic_ops = set()
 
     for nsys_key, aic_op_name in op_map.items():
+        if nsys_key == "overhead":
+            continue
+        if merge_attention_module and nsys_key in {"qkv_gemm", "proj_gemm"}:
+            continue
+
         nsys_ms = nsys_dict.get(nsys_key, 0.0)
         aic_ms = aic_merged.get(aic_op_name, 0.0)
+        if merge_attention_module and nsys_key == "attention":
+            nsys_ms += nsys_dict.get("qkv_gemm", 0.0) + nsys_dict.get("proj_gemm", 0.0)
+            aic_ms = aic_merged.get(f"{prefix}attention", 0.0)
+            aic_op_name = f"{prefix}attention(+qkv/proj)"
+            matched_aic_ops.add(f"{prefix}attention")
 
         # 特殊处理：embedding_ar 在 nsys 中单独分类
         if nsys_key == "embedding":
@@ -592,6 +674,11 @@ def print_comparison(
             # AIC embedding + embedding_ar
             aic_ms = aic_merged.get(f"{prefix}embedding", 0.0) + aic_merged.get(f"{prefix}embedding_ar", 0.0)
             aic_op_name = f"{prefix}embedding(+ar)"
+            matched_aic_ops.add(f"{prefix}embedding")
+            matched_aic_ops.add(f"{prefix}embedding_ar")
+
+        if not aic_op_name.startswith("("):
+            matched_aic_ops.add(aic_op_name)
 
         # 跳过两边都是 0 的
         if nsys_ms < 0.001 and aic_ms < 0.001:
@@ -605,10 +692,17 @@ def print_comparison(
             aic_total += aic_ms
             nsys_total += nsys_ms
 
-    # framework overhead 单独一行
+    aic_unmapped_ms = sum(
+        float(v)
+        for k, v in aic_merged.items()
+        if k not in matched_aic_ops and abs(float(v)) > 0.001
+    )
+
+    # framework overhead 单独一行；AIC 侧放未映射的收尾/辅助项，避免 TOTAL 少算。
     overhead_ms = nsys_dict.get("overhead", 0.0)
-    if overhead_ms > 0.001:
-        rows.append(("(framework_overhead)", 0.0, overhead_ms, -overhead_ms, float("nan")))
+    if overhead_ms > 0.001 or aic_unmapped_ms > 0.001:
+        rows.append(("(framework_overhead + aic_unmapped)", aic_unmapped_ms, overhead_ms, aic_unmapped_ms - overhead_ms, float("nan")))
+        aic_total += aic_unmapped_ms
         nsys_total += overhead_ms
 
     for aic_op_name, aic_ms, nsys_ms, diff, err_pct in rows:
@@ -622,7 +716,11 @@ def print_comparison(
     diff_total = aic_total - nsys_total
     err_total = (diff_total / nsys_total * 100) if nsys_total > 0 else 0
     print(f"{'TOTAL':<42s} {aic_total:10.3f} {nsys_total:10.3f} {diff_total:+10.3f} {err_total:+.1f}%")
-    print(f"{'nsys wall-clock (NVTX range)':<42s} {'':>10s} {nsys_meta['total_dur_ms']:10.3f}")
+    if nsys_meta.get("tail_window_ms") is not None:
+        print(f"{'nsys wall-clock (analysis window)':<42s} {'':>10s} {nsys_meta['analysis_dur_ms']:10.3f}")
+        print(f"{'nsys wall-clock (full NVTX group)':<42s} {'':>10s} {nsys_meta['nvtx_dur_ms']:10.3f}")
+    else:
+        print(f"{'nsys wall-clock (NVTX group)':<42s} {'':>10s} {nsys_meta['total_dur_ms']:10.3f}")
     print()
 
     # 占比分析
@@ -631,8 +729,9 @@ def print_comparison(
     print("=" * 70)
     all_entries = [(k, v) for k, v in nsys_dict.items() if v > 0.001]
     all_entries.sort(key=lambda x: -x[1])
+    pct_base = nsys_meta.get("analysis_dur_ms", nsys_meta["total_dur_ms"])
     for k, v in all_entries:
-        pct = v / nsys_meta["total_dur_ms"] * 100
+        pct = v / pct_base * 100
         bar = "█" * int(pct / 2) + "▏" * (1 if pct % 2 > 0.5 else 0)
         print(f"  {k:<30s} {v:8.3f} ms  ({pct:5.1f}%)  {bar}")
     print()
@@ -658,6 +757,8 @@ def main():
     ap.add_argument("--device-id", type=int, default=0, help="GPU device ID (默认 0)")
     ap.add_argument("--multi-rank", action="store_true",
                     help="跨所有 rank 做 MoE 负载均衡对齐：每层选 MoE 最长的 rank")
+    ap.add_argument("--tail-window-ms", type=float, default=None,
+                    help="只分析所选 NVTX group 末尾 N ms，用于排除首次 replay 的 lazy setup 污染")
     ap.add_argument("--json", action="store_true", help="额外输出 JSON 格式结果")
 
     args = ap.parse_args()
@@ -675,7 +776,12 @@ def main():
 
     # 3. 提取 nsys per-op（用 is_decode 过滤 forward_mode）
     nsys_dict, nsys_meta = extract_nsys_per_op(
-        sqlite_path, args.iter_index, is_decode=is_decode, multi_rank=args.multi_rank
+        sqlite_path,
+        args.iter_index,
+        is_decode=is_decode,
+        device_id=args.device_id,
+        multi_rank=args.multi_rank,
+        tail_window_ms=args.tail_window_ms,
     )
 
     # 4. 打印对比

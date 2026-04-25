@@ -191,10 +191,30 @@ def _get_mla_backend_list() -> list[str]:
 # Test Case Generation
 # ═══════════════════════════════════════════════════════════════════════
 
-# Sweep ranges — aligned with vllm/trtllm collect_mla_module.py
-_BATCH_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
-_SEQ_LENGTHS = [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-_HEAD_NUMS = [128, 64, 32, 16]
+def _parse_int_list_env(name: str, default: list[int]) -> list[int]:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    values = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            values.append(int(part))
+    return values or default
+
+
+# Sweep ranges — aligned with vllm/trtllm collect_mla_module.py.
+# Environment overrides let targeted gap-fill runs avoid a full expensive sweep;
+# subprocess workers inherit these values.
+_BATCH_SIZES = _parse_int_list_env(
+    "AIC_SGLANG_MLA_BATCH_SIZES",
+    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
+)
+_SEQ_LENGTHS = _parse_int_list_env(
+    "AIC_SGLANG_MLA_SEQ_LENGTHS",
+    [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384],
+)
+_HEAD_NUMS = [128, 64, 32, 16, 8]
 
 
 def get_context_test_cases(attn_type: str):
