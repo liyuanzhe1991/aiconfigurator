@@ -7,6 +7,7 @@ import copy
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import pandas as pd
@@ -36,6 +37,43 @@ def _is_hopper_system(system_name: str | None) -> bool:
     return system_name.startswith(("h100", "h200", "gh200"))
 
 
+_SYSTEM_SPEC_CACHE: dict[str, dict] = {}
+
+
+def _load_system_spec(system_name: str | None) -> dict:
+    if not system_name:
+        return {}
+    if system_name not in _SYSTEM_SPEC_CACHE:
+        systems_dir = Path(__file__).resolve().parents[1] / "systems"
+        spec_path = systems_dir / f"{system_name}.yaml"
+        if not spec_path.exists():
+            _SYSTEM_SPEC_CACHE[system_name] = {}
+        else:
+            with spec_path.open(encoding="utf-8") as f:
+                _SYSTEM_SPEC_CACHE[system_name] = yaml.safe_load(f) or {}
+    return _SYSTEM_SPEC_CACHE[system_name]
+
+
+def _is_blackwell_system(system_name: str | None) -> bool:
+    spec = _load_system_spec(system_name)
+    return int(spec.get("gpu", {}).get("sm_version", -1)) >= 100
+
+
+def _sglang_megamoe_parallel_lists(system_name: str, should_enable_pp: bool) -> dict:
+    spec = _load_system_spec(system_name)
+    node_spec = spec.get("node", {})
+    has_rack_nvl = int(node_spec.get("num_gpus_per_rack", 0) or 0) >= 32
+    ep_list = [8, 16, 32] if has_rack_nvl else [8]
+    return {
+        "num_gpu_per_worker": ep_list,
+        "tp_list": [1, 2, 4, 8],
+        "pp_list": ep_list if should_enable_pp else [1],
+        "dp_list": [1, 2, 4, 8, 16, 32] if has_rack_nvl else [1, 2, 4, 8],
+        "moe_tp_list": [1],
+        "moe_ep_list": ep_list,
+    }
+
+
 def _validate_deepseek_v4_model_hardware_support(
     *,
     model_path: str,
@@ -58,6 +96,32 @@ def _validate_deepseek_v4_model_hardware_support(
         f"{model_path} uses native FP4 routed-expert weights and is not supported on Hopper systems "
         f"{hopper_systems}. Use {replacement} instead."
     )
+
+
+def _validate_megamoe_backend_support(
+    *,
+    model_family: str,
+    backend_name: str,
+    moe_backend: str | None,
+    system_name: str,
+    decode_system_name: str | None,
+) -> None:
+    if moe_backend != "megamoe":
+        return
+    if backend_name != common.BackendName.sglang.value:
+        raise ValueError("moe_backend='megamoe' is currently supported only for the SGLang backend.")
+    if model_family != "DEEPSEEKV4":
+        raise ValueError("moe_backend='megamoe' is currently supported only for DeepSeek-V4 models.")
+
+    systems = [system_name]
+    if decode_system_name:
+        systems.append(decode_system_name)
+    non_blackwell = sorted({system for system in systems if not _is_blackwell_system(system)})
+    if non_blackwell:
+        raise ValueError(
+            "moe_backend='megamoe' requires Blackwell-class systems (SM >= 100); "
+            f"non-Blackwell systems: {non_blackwell}."
+        )
 
 
 @dataclass(frozen=True)
@@ -163,7 +227,7 @@ def build_disagg_parallel_lists(
         should_enable_pp: Enable pipeline-parallelism candidates (default ``False``).
         prefill_enable_wideep: Override WideEP for prefill (None = use *enable_wideep*).
         decode_enable_wideep: Override WideEP for decode (None = use *enable_wideep*).
-        moe_backend: MoE communication backend (``"deepep_moe"`` or ``None``).
+        moe_backend: MoE backend (``"deepep_moe"``, ``"megamoe"``, or ``None``).
 
     Returns:
         ``(prefill_worker_config, decode_worker_config)`` - two dicts each containing
@@ -234,7 +298,10 @@ def build_disagg_parallel_lists(
                 decode_worker_config["moe_tp_list"] = parallel_config_list
                 decode_worker_config["moe_ep_list"] = parallel_config_list
         elif backend_name == "sglang":
-            if enable_wideep:
+            if moe_backend == "megamoe":
+                prefill_worker_config.update(_sglang_megamoe_parallel_lists(prefill_system, should_enable_pp))
+                decode_worker_config.update(_sglang_megamoe_parallel_lists(decode_system, should_enable_pp))
+            elif enable_wideep:
                 # Inter-node DeepEP (ep >= 8, cross-node)
                 prefill_worker_config["num_gpu_per_worker"] = [8, 16, 32]
                 prefill_worker_config["tp_list"] = [1, 2, 4, 8]
@@ -324,20 +391,19 @@ class TaskConfigFactory:
         # for higher tensor core throughput. Profiles applied after this can override.
         # In disagg mode, prefill and decode may run on different hardware, so only
         # promote the workers that are actually on Blackwell.
-        _blackwell_systems = ("gb200", "gb300", "b200_sxm", "b300_sxm")
         if ctx.backend_name == "trtllm" and ctx.model_path in ("openai/gpt-oss-120b", "openai/gpt-oss-20b"):
             quant_override = {"moe_quant_mode": "w4a8_mxfp4_mxfp8"}
             if ctx.serving_mode == "agg":
-                if ctx.system_name in _blackwell_systems:
+                if _is_blackwell_system(ctx.system_name):
                     _deep_merge(config_dict, {"worker_config": quant_override})
                     applied_layers.append("gptoss-blackwell-mxfp8")
             else:
                 prefill_system = ctx.system_name
                 decode_system = ctx.decode_system_name or ctx.system_name
                 promoted = {}
-                if prefill_system in _blackwell_systems:
+                if _is_blackwell_system(prefill_system):
                     promoted["prefill_worker_config"] = quant_override
-                if decode_system in _blackwell_systems:
+                if _is_blackwell_system(decode_system):
                     promoted["decode_worker_config"] = quant_override
                 if promoted:
                     _deep_merge(config_dict, promoted)
@@ -453,7 +519,9 @@ class TaskConfigFactory:
                     worker_config["moe_tp_list"] = [1, 2, 4, 8]
                     worker_config["moe_ep_list"] = [1, 2, 4, 8]
             elif ctx.backend_name == "sglang":
-                if ctx.enable_wideep:
+                if ctx.moe_backend == "megamoe":
+                    worker_config.update(_sglang_megamoe_parallel_lists(ctx.system_name, should_enable_pp))
+                elif ctx.enable_wideep:
                     # Inter-node DeepEP (ep >= 8, cross-node)
                     worker_config["num_gpu_per_worker"] = [8, 16, 32, 64]
                     worker_config["tp_list"] = [1, 2, 4, 8]
@@ -764,8 +832,17 @@ class TaskConfig:
         if enable_wideep and moe_backend is None:
             moe_backend = "deepep_moe"
 
+        model_family = get_model_family(model_path)
+
         _validate_deepseek_v4_model_hardware_support(
             model_path=model_path,
+            system_name=system_name,
+            decode_system_name=decode_system_name,
+        )
+        _validate_megamoe_backend_support(
+            model_family=model_family,
+            backend_name=backend_name,
+            moe_backend=moe_backend,
             system_name=system_name,
             decode_system_name=decode_system_name,
         )
@@ -773,7 +850,7 @@ class TaskConfig:
         ctx = TaskContext(
             serving_mode=serving_mode,
             model_path=model_path,
-            model_family=get_model_family(model_path),
+            model_family=model_family,
             system_name=system_name,
             decode_system_name=decode_system_name,
             backend_name=backend_name,
@@ -991,7 +1068,11 @@ class TaskConfig:
 
             moe_mode = _to_name(_get_cfg_value(wc, "moe_quant_mode"))
             wc_moe_backend = getattr(wc, "moe_backend", None) or moe_backend
-            if self.backend_name == "sglang" and wc_moe_backend == "deepep_moe":
+            if self.backend_name == "sglang" and wc_moe_backend == "megamoe":
+                if not is_deepseek_v4:
+                    raise ValueError("moe_backend='megamoe' is currently supported only for DeepSeek-V4 models.")
+                _supported_or_raise("dsv4_megamoe_module", moe_mode)
+            elif self.backend_name == "sglang" and wc_moe_backend == "deepep_moe":
                 if validate_context:
                     _supported_or_raise("wideep_context_moe", moe_mode)
                 if validate_generation:
