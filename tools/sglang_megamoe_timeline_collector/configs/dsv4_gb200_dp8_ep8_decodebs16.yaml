@@ -1,0 +1,81 @@
+# Baseline config matching the validated native SGLang PD MegaMoE timeline run.
+# Render only:
+#   python3 tools/sglang_megamoe_timeline_collector/render.py --config tools/sglang_megamoe_timeline_collector/configs/dsv4_gb200_dp8_ep8_decodebs16.yaml
+# Render and run:
+#   python3 tools/sglang_megamoe_timeline_collector/render.py --config tools/sglang_megamoe_timeline_collector/configs/dsv4_gb200_dp8_ep8_decodebs16.yaml --run
+
+run_id: null
+namespace: default
+
+images:
+  image_pull_secret: nvcrimagepullsecret
+  image_pull_secret_source_namespace: kprashanth
+
+profile:
+  isl: 8192
+  osl: 1024
+  prefill_local_bs: 1
+  decode_local_bs_list: [16]
+  e2e_global_concurrency_override: 256
+  e2e_request_multiplier: 2
+  prefill_profile_steps: 16
+  prefill_verify_min_target_hits: 4
+  decode_profile_steps: 16
+  decode_verify_min_target_hits: 4
+  aiperf_random_seed: 100
+
+prefill:
+  nodes: 2
+  tp: 8
+  pp: 1
+  dp: 8
+  ep: 8
+  deepep_mode: normal
+  mem_fraction_static: 0.8
+  chunked_prefill_size: 65536
+  max_prefill_tokens: 8192
+  prefill_max_requests: 1
+  max_running_requests: 1024
+  disable_radix_cache: true
+
+decode:
+  nodes: 2
+  tp: 8
+  pp: 1
+  dp: 8
+  ep: 8
+  deepep_mode: low_latency
+  mem_fraction_static: 0.849
+  chunked_prefill_size: 65536
+  max_prefill_tokens: 32768
+  max_running_requests: 128
+  decode_log_interval: 1
+  cuda_graph_max_bs: 16
+  cuda_graph_bs: [1, 2, 4, 8, 16]
+  disable_radix_cache: false
+
+deepgemm:
+  use_megamoe: true
+  enable_jit: true
+  precompile: true
+  prefill_cache_dir: /models/aic_native_sglang_megamoe_timeline/20260507200011/deep_gemm_cache/prefill
+  decode_cache_dir: /models/aic_native_sglang_megamoe_timeline/20260507200011/deep_gemm_cache/decode
+  prefill_max_tokens_per_rank: 8320
+  decode_max_tokens_per_rank: 512
+  deepep_num_max_dispatch_tokens_per_rank: 0
+
+sglang_common:
+  moe_runner_backend: deep_gemm
+  moe_a2a_backend: deepep
+  disaggregation_transfer_backend: nixl
+  disaggregation_bootstrap_port: 8998
+
+nsys:
+  trace: cuda,nvtx,osrt
+  capture_range: cudaProfilerApi
+  capture_range_end: repeat:3
+
+download:
+  chunk_bytes: 32M
+  local_port: 18082
+  remote_http_port: 8001

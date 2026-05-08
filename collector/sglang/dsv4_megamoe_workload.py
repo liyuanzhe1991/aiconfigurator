@@ -11,8 +11,8 @@ placement layer needed by real EP collection.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import torch
 
@@ -23,6 +23,7 @@ except ImportError:
 
 
 SUPPORTED_DISTRIBUTIONS = ("balanced", "power_law_1.01", "power_law_1.2")
+SUPPORTED_SOURCE_POLICIES = ("random",)
 
 
 @dataclass(frozen=True)
@@ -139,7 +140,12 @@ def _logits_for_distribution(
     raise ValueError(f"unsupported distribution kind: {spec.kind}")
 
 
-def _route_matrix(topk_ids_by_rank: Sequence[torch.Tensor], *, routed_num_experts: int, ep_size: int) -> list[list[int]]:
+def _route_matrix(
+    topk_ids_by_rank: Sequence[torch.Tensor],
+    *,
+    routed_num_experts: int,
+    ep_size: int,
+) -> list[list[int]]:
     experts_per_rank = routed_num_experts // ep_size
     matrix = [[0 for _ in range(ep_size)] for _ in range(ep_size)]
     for src_rank, topk_ids in enumerate(topk_ids_by_rank):
@@ -162,7 +168,9 @@ def _validate_plan(
 ) -> None:
     if len(topk_ids_by_rank) != len(tokens_per_rank):
         raise ValueError("rank count mismatch")
-    for rank, (topk_ids, topk_weights, tokens) in enumerate(zip(topk_ids_by_rank, topk_weights_by_rank, tokens_per_rank)):
+    for rank, (topk_ids, topk_weights, tokens) in enumerate(
+        zip(topk_ids_by_rank, topk_weights_by_rank, tokens_per_rank, strict=True)
+    ):
         if tuple(topk_ids.shape) != (tokens, routed_topk):
             raise ValueError(f"rank {rank} topk_ids shape mismatch: {tuple(topk_ids.shape)}")
         if tuple(topk_weights.shape) != (tokens, routed_topk):
@@ -196,9 +204,11 @@ def build_routing_plan(
     """Build a local routing plan from an AIC distribution helper.
 
     ``distribution`` controls destination expert load.  ``source_policy`` controls
-    source-rank placement of the generated token rows.  For now only ``random``
-    source placement is supported: it shuffles whole token rows, preserving both
-    expert counts and per-token top-k structure.
+    source-rank placement of the generated token rows.
+
+    ``random`` shuffles whole token rows before assigning them to source ranks,
+    preserving both expert counts and per-token top-k structure.
+
     """
     tokens_per_rank = _validate_common(
         tokens_per_rank=tokens_per_rank,
@@ -207,8 +217,10 @@ def build_routing_plan(
         ep_size=ep_size,
         rank=rank,
     )
-    if source_policy != "random":
-        raise ValueError(f"unsupported source_policy: {source_policy}")
+    if source_policy not in SUPPORTED_SOURCE_POLICIES:
+        raise ValueError(
+            f"unsupported source_policy: {source_policy}; expected one of {SUPPORTED_SOURCE_POLICIES}"
+        )
 
     spec = parse_distribution(distribution)
     global_num_tokens = int(sum(tokens_per_rank))
@@ -224,7 +236,10 @@ def build_routing_plan(
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True).clamp_min(1e-20)
     topk_ids = topk_ids.to(dtype=torch.int32, device="cpu").contiguous()
     topk_weights = topk_weights.to(dtype=torch.float32, device="cpu").contiguous()
-    expected_expert_counts = torch.bincount(topk_ids.reshape(-1).to(dtype=torch.int64), minlength=routed_num_experts)
+    expected_expert_counts = torch.bincount(
+        topk_ids.reshape(-1).to(dtype=torch.int64),
+        minlength=routed_num_experts,
+    )
 
     generator = torch.Generator(device="cpu")
     generator.manual_seed(int(routing_seed))
@@ -232,8 +247,8 @@ def build_routing_plan(
     topk_ids = topk_ids[permutation].contiguous()
     topk_weights = topk_weights[permutation].contiguous()
 
-    topk_ids_by_rank: list[torch.Tensor] = []
-    topk_weights_by_rank: list[torch.Tensor] = []
+    topk_ids_by_rank = []
+    topk_weights_by_rank = []
     offset = 0
     for tokens in tokens_per_rank:
         end = offset + tokens

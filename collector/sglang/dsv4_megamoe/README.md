@@ -22,8 +22,7 @@ outside `deep_gemm.fp8_fp4_mega_moe`; this collector is scoped to the routed
 MegaMoE module.
 The cold symmetric buffer allocation/rendezvous path is outside per-module
 latency, matching SGLang's cached-buffer steady state.  Perf rows record
-`buffer_policy=cached_sglang`,
-`buffer_lookup_in_timed_callable=true`, and `includes_buffer_init=false`.
+`buffer_policy=cached_sglang` and `includes_buffer_init=false`.
 
 CUDA graph capture is mandatory.  The collector calls AIC
 `benchmark_with_power(..., use_cuda_graph=True, allow_graph_fail=False)` and
@@ -58,17 +57,34 @@ generation.  The Kubernetes jobs can still be split with `PHASES=context` and
 `PHASES=generation` to reduce collection scope, but both phases write standard
 rows to the same `dsv4_megamoe_module_perf.txt` table.  The default split is:
 
-- context/prefill tokens: `1024,2048,4096,8192,16384`
+- context/prefill tokens: `1024,2048,4096,8192,16384,32768`
 - generation/decode tokens: `1,2,4,8,16,32,64,128,256,512`
 
-Together these cover the standard MoE token sweep without duplicating small
-EP8 points across the two jobs.
+Together these cover the standard MoE token sweep.  For GB200 full collection,
+run both context and generation for EP8, EP16, and EP32 when all EP sizes are
+needed by the AIC query path.
 
 Each row records both `num_max_tokens_per_rank` and
 `effective_num_max_tokens_per_rank`.  The effective value is read from the
 DeepGEMM symmetric buffer after DeepGEMM applies its internal token alignment.
 If `NUM_MAX_TOKENS_PER_RANK` or `--num-max-tokens-per-rank` is left at `0`, the
 wrapper/renderer uses the largest token count in the selected phase list.
+
+The committed perf schema follows the existing SGLang wideep MoE tables and
+keeps only query keys plus required boundary/topology fields:
+
+```text
+framework,version,device,op_name,kernel_source,
+phase,moe_dtype,kernel_dtype,num_tokens,global_num_tokens,
+hidden_size,inter_size,topk,num_experts,num_fused_shared_experts,
+moe_tp_size,moe_ep_size,distribution,source_policy,pre_dispatch,
+num_max_tokens_per_rank,effective_num_max_tokens_per_rank,
+routed_scaling_factor,includes_routed_scale,includes_gate_topk,
+buffer_policy,includes_buffer_init,used_cuda_graph,latency
+```
+
+`num_tokens` is the local-rank token count used by AIC's MegaMoE query path;
+`global_num_tokens` is recorded only to make cross-rank collection explicit.
 
 ## Routing Distributions
 
@@ -85,10 +101,14 @@ its own power-law generator.
 `distribution` controls destination expert load.  `source_policy=random`
 shuffles complete token rows before assigning them to source ranks, preserving
 expert counts and per-token top-k structure while making the source/destination
-traffic explicit.  This source placement is prepared before timing, so it does
-not add overhead to the measured MegaMoE module.  Each perf row records
-`rank_loads`, `src_dst_matrix`, `local_selection_ratio`,
-`remote_selection_ratio`, and `bottleneck_rank`.
+traffic explicit.  Source placement is prepared before timing, so it does not
+add overhead to the measured MegaMoE module.  Routing diagnostics such as
+`rank_loads`, `tokens_per_rank`, `src_dst_matrix`, `local_selection_ratio`,
+`remote_selection_ratio`, and `bottleneck_rank` are written to
+`dsv4_megamoe_module_debug.jsonl` beside the perf output only when debug output
+is explicitly enabled with `--write-debug-output 1`, `WRITE_DEBUG_OUTPUT=1`, or
+`AIC_DSV4_MEGAMOE_DEBUG=1`.  The default collector path does not create this
+debug file.
 
 ## Hardware Mapping
 

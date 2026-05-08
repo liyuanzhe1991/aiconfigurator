@@ -1,0 +1,733 @@
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: aic-sgl-native-105435-domain
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+spec:
+  numNodes: 4
+  channel:
+    allocationMode: Single
+    resourceClaimTemplate:
+      name: aic-sgl-native-105435-channel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aic-sgl-native-105435-prefill
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: prefill
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: prefill
+  ports:
+    - name: http
+      port: 30000
+      targetPort: 30000
+    - name: bootstrap
+      port: 8998
+      targetPort: 8998
+    - name: dist
+      port: 29500
+      targetPort: 29500
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aic-sgl-native-105435-prefill-leader
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: prefill-leader
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: aic-sgl-native-105435-prefill-0
+  ports:
+    - name: http
+      port: 30000
+      targetPort: 30000
+    - name: bootstrap
+      port: 8998
+      targetPort: 8998
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aic-sgl-native-105435-decode
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: decode
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: decode
+  ports:
+    - name: http
+      port: 30000
+      targetPort: 30000
+    - name: dist
+      port: 29500
+      targetPort: 29500
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aic-sgl-native-105435-decode-leader
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: decode-leader
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: aic-sgl-native-105435-decode-0
+  ports:
+    - name: http
+      port: 30000
+      targetPort: 30000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aic-sgl-native-105435-prefill
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: prefill
+spec:
+  serviceName: aic-sgl-native-105435-prefill
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+      component: prefill
+  template:
+    metadata:
+      labels:
+        app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+        component: prefill
+      annotations:
+        networking.gke.io/default-interface: eth0
+        networking.gke.io/interfaces: |
+          [
+            {"interfaceName":"eth0","network":"default"},
+            {"interfaceName":"rdma0","network":"rdma-0"},
+            {"interfaceName":"rdma1","network":"rdma-1"},
+            {"interfaceName":"rdma2","network":"rdma-2"},
+            {"interfaceName":"rdma3","network":"rdma-3"}
+          ]
+    spec:
+      hostIPC: true
+      imagePullSecrets:
+        - name: nvcrimagepullsecret
+      nodeSelector:
+        kubernetes.io/arch: arm64
+        cloud.google.com/gke-nodepool: customer-gpu-w0e
+        nvidia.com/gpu.product: NVIDIA-GB200
+        nvidia.com/gpu.clique: 60efb90c-3713-4488-abf7-0da90d2eaa64.2
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: user-workload
+          effect: NoExecute
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          operator: Equal
+          value: arm64
+          effect: NoSchedule
+      initContainers:
+        - name: copy-nsys
+          image: nvcr.io/nvidia/pytorch:25.04-py3
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euxo pipefail
+              shopt -s nullglob
+              candidates=(/usr/local/cuda-*/NsightSystems-cli-*)
+              if [ "${#candidates[@]}" -eq 0 ]; then
+                echo "no NsightSystems-cli directory found"
+                exit 1
+              fi
+              cp -a "${candidates[@]}" /nsys-tools/
+              test -x /nsys-tools/NsightSystems-cli-2025.2.1/target-linux-sbsa-armv8/nsys
+          volumeMounts:
+            - name: nsys-tools
+              mountPath: /nsys-tools
+      containers:
+        - name: sglang-prefill
+          image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euxo pipefail
+              ulimit -l unlimited
+              ulimit -n 1048576
+              export PATH="/nsys-tools/NsightSystems-cli-2025.2.1/target-linux-sbsa-armv8:${PATH}"
+              python3 /sglang_nvtx_patch/apply_scheduler_nvtx_patch.py
+              export RANK="${HOSTNAME##*-}"
+              export MASTER_ADDR="aic-sgl-native-105435-prefill-0.aic-sgl-native-105435-prefill.${POD_NAMESPACE}.svc.cluster.local"
+              until getent hosts "${MASTER_ADDR}"; do
+                echo "waiting for ${MASTER_ADDR}"
+                sleep 2
+              done
+              export HF_HOME=/models
+              export HF_HUB_OFFLINE=1
+              export TRANSFORMERS_OFFLINE=1
+              export SGLANG_DSV4_MODE=2604
+              export SGLANG_WARMUP_TIMEOUT=1800
+              export SGLANG_PROFILE_WITH_STACK=0
+              export SGLANG_PROFILE_RECORD_SHAPES=0
+              export SGLANG_LOG_FORWARD_ITERS=1
+              export SGLANG_SCHEDULER_NVTX=1
+              export SGLANG_TORCH_PROFILER_DIR=/models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/sglang_profiles/default_prefill
+              export SGLANG_SET_CPU_AFFINITY=true
+              export SGLANG_ENABLE_JIT_DEEPGEMM=1
+              export SGLANG_JIT_DEEPGEMM_PRECOMPILE=1
+              export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+              export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+              export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+              export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+              export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
+              export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+              export SGLANG_DG_CACHE_DIR=/models/aic_native_sglang_megamoe_timeline/20260507200011/deep_gemm_cache/prefill
+              export DG_JIT_CACHE_DIR="${SGLANG_DG_CACHE_DIR}"
+              export DG_JIT_PRINT_COMPILER_COMMAND=1
+              nsys --version
+              mkdir -p "${DG_JIT_CACHE_DIR}"
+              if [ -d "${DG_JIT_CACHE_DIR}/cache" ]; then
+                deep_gemm_cache_kernels=$(find "${DG_JIT_CACHE_DIR}/cache" -maxdepth 1 -type d -name 'kernel.*' | wc -l)
+              else
+                deep_gemm_cache_kernels=0
+              fi
+              echo "DeepGEMM cache dir: ${DG_JIT_CACHE_DIR}; cached kernel dirs: ${deep_gemm_cache_kernels}"
+              mkdir -p /models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/nsys/prefill
+              exec nsys profile \
+                --force-overwrite=true \
+                --trace=cuda,nvtx,osrt \
+                --cuda-graph-trace=node \
+                --capture-range=cudaProfilerApi \
+                --capture-range-end=repeat:3 \
+                --trace-fork-before-exec=true \
+                --sample=none \
+                --cpuctxsw=none \
+                --output=/models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/nsys/prefill/${HOSTNAME} \
+                python3 -m sglang.launch_server \
+                  --model-path deepseek-ai/DeepSeek-V4-Pro \
+                  --served-model-name deepseek-ai/DeepSeek-V4-Pro \
+                  --trust-remote-code \
+                  --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_2,mlx5_3 \
+                  --host 0.0.0.0 \
+                  --port 30000 \
+                  --dist-init-addr "${MASTER_ADDR}:29500" \
+                  --nnodes 2 \
+                  --node-rank "${RANK}" \
+                  --tensor-parallel-size 8 \
+                  --pipeline-parallel-size 1 \
+                  --data-parallel-size 8 \
+                  --expert-parallel-size 8 \
+                  --enable-dp-attention \
+                  --enable-dp-lm-head \
+                  --moe-dense-tp-size 1 \
+                  --moe-a2a-backend deepep \
+                  --deepep-mode normal \
+                  --moe-runner-backend deep_gemm \
+                  --kv-cache-dtype fp8_e4m3 \
+                  --mem-fraction-static 0.8 \
+                  --context-length 32768 \
+                  --page-size 64 \
+                  --disable-radix-cache \
+                  --chunked-prefill-size 65536 \
+                  --max-prefill-tokens 8192 \
+                  --prefill-max-requests 1 \
+                  --max-running-requests 1024 \
+                  --watchdog-timeout 3600 \
+                  --dist-timeout 3600 \
+                  --disaggregation-mode prefill \
+                  --disaggregation-bootstrap-port 8998 \
+                  --disaggregation-transfer-backend nixl
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            - name: NCCL_CUMEM_ENABLE
+              value: "1"
+            - name: NCCL_NVLS_ENABLE
+              value: "1"
+            - name: NCCL_MNNVL_ENABLE
+              value: "1"
+            - name: NVIDIA_GDRCOPY
+              value: "1"
+            - name: NCCL_STORE_TIMEOUT
+              value: "7200"
+            - name: GLOO_SOCKET_IFNAME
+              value: eth0
+            - name: NCCL_SOCKET_IFNAME
+              value: eth0
+            - name: NVSHMEM_HCA_PE_MAPPING
+              value: "mlx5_0:1:2,mlx5_1:1:2,mlx5_2:1:2,mlx5_3:1:2"
+            - name: NVSHMEM_IB_GID_INDEX
+              value: "3"
+            - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+              value: "1"
+            - name: SGLANG_SET_CPU_AFFINITY
+              value: "true"
+            - name: SGLANG_ENABLE_JIT_DEEPGEMM
+              value: "1"
+            - name: NCCL_IB_QPS_PER_CONNECTION
+              value: "8"
+            - name: NCCL_IB_SPLIT_DATA_ON_QPS
+              value: "1"
+            - name: NCCL_NET_PLUGIN
+              value: "none"
+            - name: NCCL_IB_TC
+              value: "136"
+            - name: NCCL_MIN_NCHANNELS
+              value: "4"
+            - name: NCCL_IB_SL
+              value: "5"
+            - name: NCCL_IB_HCA
+              value: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+            - name: UCX_TLS
+              value: cuda_ipc,cuda_copy,rc
+            - name: UCX_IB_GID_INDEX
+              value: "3"
+            - name: UCX_RC_TIMEOUT
+              value: 600s
+            - name: UCX_KEEPALIVE_INTERVAL
+              value: 300s
+            - name: UCX_LOG_LEVEL
+              value: info
+            - name: NIXL_LOG_LEVEL
+              value: INFO
+          readinessProbe:
+            periodSeconds: 30
+            tcpSocket:
+              port: 30000
+          ports:
+            - name: http
+              containerPort: 30000
+            - name: bootstrap
+              containerPort: 8998
+            - name: dist
+              containerPort: 29500
+          resources:
+            claims:
+              - name: compute-domain-channel
+            limits:
+              nvidia.com/gpu: "4"
+              "networking.gke.io.networks/rdma-0": "1"
+              "networking.gke.io.networks/rdma-1": "1"
+              "networking.gke.io.networks/rdma-2": "1"
+              "networking.gke.io.networks/rdma-3": "1"
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["IPC_LOCK"]
+          volumeMounts:
+            - name: nsys-tools
+              mountPath: /nsys-tools
+            - name: scheduler-nvtx-patch
+              mountPath: /sglang_nvtx_patch
+              readOnly: true
+            - name: shared-model-cache
+              mountPath: /models
+            - name: dshm
+              mountPath: /dev/shm
+            - name: ib
+              mountPath: /dev/infiniband
+          workingDir: /workspace/
+      resourceClaims:
+        - name: compute-domain-channel
+          resourceClaimTemplateName: aic-sgl-native-105435-channel
+      volumes:
+        - name: nsys-tools
+          emptyDir: {}
+        - name: scheduler-nvtx-patch
+          configMap:
+            name: aic-sgl-native-105435-scheduler-nvtx-patch
+        - name: shared-model-cache
+          persistentVolumeClaim:
+            claimName: shared-model-cache
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 200Gi
+        - name: ib
+          hostPath:
+            path: /dev/infiniband
+            type: Directory
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aic-sgl-native-105435-decode
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: decode
+spec:
+  serviceName: aic-sgl-native-105435-decode
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+      component: decode
+  template:
+    metadata:
+      labels:
+        app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+        component: decode
+      annotations:
+        networking.gke.io/default-interface: eth0
+        networking.gke.io/interfaces: |
+          [
+            {"interfaceName":"eth0","network":"default"},
+            {"interfaceName":"rdma0","network":"rdma-0"},
+            {"interfaceName":"rdma1","network":"rdma-1"},
+            {"interfaceName":"rdma2","network":"rdma-2"},
+            {"interfaceName":"rdma3","network":"rdma-3"}
+          ]
+    spec:
+      hostIPC: true
+      imagePullSecrets:
+        - name: nvcrimagepullsecret
+      nodeSelector:
+        kubernetes.io/arch: arm64
+        cloud.google.com/gke-nodepool: customer-gpu-w0e
+        nvidia.com/gpu.product: NVIDIA-GB200
+        nvidia.com/gpu.clique: 60efb90c-3713-4488-abf7-0da90d2eaa64.2
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: user-workload
+          effect: NoExecute
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          operator: Equal
+          value: arm64
+          effect: NoSchedule
+      initContainers:
+        - name: copy-nsys
+          image: nvcr.io/nvidia/pytorch:25.04-py3
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euxo pipefail
+              shopt -s nullglob
+              candidates=(/usr/local/cuda-*/NsightSystems-cli-*)
+              if [ "${#candidates[@]}" -eq 0 ]; then
+                echo "no NsightSystems-cli directory found"
+                exit 1
+              fi
+              cp -a "${candidates[@]}" /nsys-tools/
+              test -x /nsys-tools/NsightSystems-cli-2025.2.1/target-linux-sbsa-armv8/nsys
+          volumeMounts:
+            - name: nsys-tools
+              mountPath: /nsys-tools
+      containers:
+        - name: sglang-decode
+          image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euxo pipefail
+              ulimit -l unlimited
+              ulimit -n 1048576
+              export PATH="/nsys-tools/NsightSystems-cli-2025.2.1/target-linux-sbsa-armv8:${PATH}"
+              python3 /sglang_nvtx_patch/apply_scheduler_nvtx_patch.py
+              export RANK="${HOSTNAME##*-}"
+              export MASTER_ADDR="aic-sgl-native-105435-decode-0.aic-sgl-native-105435-decode.${POD_NAMESPACE}.svc.cluster.local"
+              until getent hosts "${MASTER_ADDR}"; do
+                echo "waiting for ${MASTER_ADDR}"
+                sleep 2
+              done
+              export HF_HOME=/models
+              export HF_HUB_OFFLINE=1
+              export TRANSFORMERS_OFFLINE=1
+              export SGLANG_DSV4_MODE=2604
+              export SGLANG_WARMUP_TIMEOUT=1800
+              export SGLANG_PROFILE_WITH_STACK=0
+              export SGLANG_PROFILE_RECORD_SHAPES=0
+              export SGLANG_LOG_FORWARD_ITERS=1
+              export SGLANG_SCHEDULER_NVTX=1
+              export SGLANG_TORCH_PROFILER_DIR=/models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/sglang_profiles/default_decode
+              export SGLANG_SET_CPU_AFFINITY=true
+              export SGLANG_ENABLE_JIT_DEEPGEMM=1
+              export SGLANG_JIT_DEEPGEMM_PRECOMPILE=1
+              export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+              export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+              export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+              export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+              export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=512
+              export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+              export SGLANG_DG_CACHE_DIR=/models/aic_native_sglang_megamoe_timeline/20260507200011/deep_gemm_cache/decode
+              export DG_JIT_CACHE_DIR="${SGLANG_DG_CACHE_DIR}"
+              export DG_JIT_PRINT_COMPILER_COMMAND=1
+              nsys --version
+              mkdir -p "${DG_JIT_CACHE_DIR}"
+              if [ -d "${DG_JIT_CACHE_DIR}/cache" ]; then
+                deep_gemm_cache_kernels=$(find "${DG_JIT_CACHE_DIR}/cache" -maxdepth 1 -type d -name 'kernel.*' | wc -l)
+              else
+                deep_gemm_cache_kernels=0
+              fi
+              echo "DeepGEMM cache dir: ${DG_JIT_CACHE_DIR}; cached kernel dirs: ${deep_gemm_cache_kernels}"
+              mkdir -p /models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/nsys/decode
+              exec nsys profile \
+                --force-overwrite=true \
+                --trace=cuda,nvtx,osrt \
+                --cuda-graph-trace=node \
+                --capture-range=cudaProfilerApi \
+                --capture-range-end=repeat:3 \
+                --trace-fork-before-exec=true \
+                --sample=none \
+                --cpuctxsw=none \
+                --output=/models/aic_native_sglang_megamoe_scheduler_nvtx/20260508105435/nsys/decode/${HOSTNAME} \
+                python3 -m sglang.launch_server \
+                  --model-path deepseek-ai/DeepSeek-V4-Pro \
+                  --served-model-name deepseek-ai/DeepSeek-V4-Pro \
+                  --trust-remote-code \
+                  --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_2,mlx5_3 \
+                  --host 0.0.0.0 \
+                  --port 30000 \
+                  --dist-init-addr "${MASTER_ADDR}:29500" \
+                  --nnodes 2 \
+                  --node-rank "${RANK}" \
+                  --tensor-parallel-size 8 \
+                  --pipeline-parallel-size 1 \
+                  --data-parallel-size 8 \
+                  --expert-parallel-size 8 \
+                  --enable-dp-attention \
+                  --enable-dp-lm-head \
+                  --moe-dense-tp-size 1 \
+                  --moe-a2a-backend deepep \
+                  --deepep-mode low_latency \
+                  --moe-runner-backend deep_gemm \
+                  --kv-cache-dtype fp8_e4m3 \
+                  --mem-fraction-static 0.849 \
+                  --context-length 32768 \
+                  --page-size 64 \
+                  --chunked-prefill-size 65536 \
+                  --max-prefill-tokens 32768 \
+                  --max-running-requests 128 \
+                  --decode-log-interval 1 \
+                  --cuda-graph-max-bs 16 \
+                  --cuda-graph-bs 1 2 4 8 16 \
+                  --watchdog-timeout 3600 \
+                  --dist-timeout 3600 \
+                  --disaggregation-mode decode \
+                  --disaggregation-transfer-backend nixl
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            - name: NCCL_CUMEM_ENABLE
+              value: "1"
+            - name: NCCL_NVLS_ENABLE
+              value: "1"
+            - name: NCCL_MNNVL_ENABLE
+              value: "1"
+            - name: NVIDIA_GDRCOPY
+              value: "1"
+            - name: NCCL_STORE_TIMEOUT
+              value: "7200"
+            - name: GLOO_SOCKET_IFNAME
+              value: eth0
+            - name: NCCL_SOCKET_IFNAME
+              value: eth0
+            - name: CUDA_LAUNCH_BLOCKING
+              value: "0"
+            - name: NVSHMEM_HCA_PE_MAPPING
+              value: "mlx5_0:1:2,mlx5_1:1:2,mlx5_2:1:2,mlx5_3:1:2"
+            - name: NVSHMEM_IB_GID_INDEX
+              value: "3"
+            - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+              value: "1"
+            - name: SGLANG_SET_CPU_AFFINITY
+              value: "true"
+            - name: SGLANG_ENABLE_JIT_DEEPGEMM
+              value: "1"
+            - name: NCCL_IB_QPS_PER_CONNECTION
+              value: "8"
+            - name: NCCL_IB_SPLIT_DATA_ON_QPS
+              value: "1"
+            - name: NCCL_NET_PLUGIN
+              value: "none"
+            - name: NCCL_IB_TC
+              value: "136"
+            - name: NCCL_MIN_NCHANNELS
+              value: "4"
+            - name: NCCL_IB_SL
+              value: "5"
+            - name: NCCL_IB_HCA
+              value: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+            - name: MC_TE_METRIC
+              value: "true"
+            - name: SGLANG_MOONCAKE_TRANS_THREAD
+              value: "16"
+            - name: UCX_TLS
+              value: cuda_ipc,cuda_copy,rc
+            - name: UCX_IB_GID_INDEX
+              value: "3"
+            - name: UCX_RC_TIMEOUT
+              value: 600s
+            - name: UCX_KEEPALIVE_INTERVAL
+              value: 300s
+            - name: UCX_LOG_LEVEL
+              value: info
+            - name: NIXL_LOG_LEVEL
+              value: INFO
+          readinessProbe:
+            periodSeconds: 30
+            tcpSocket:
+              port: 30000
+          ports:
+            - name: http
+              containerPort: 30000
+            - name: dist
+              containerPort: 29500
+          resources:
+            claims:
+              - name: compute-domain-channel
+            limits:
+              nvidia.com/gpu: "4"
+              "networking.gke.io.networks/rdma-0": "1"
+              "networking.gke.io.networks/rdma-1": "1"
+              "networking.gke.io.networks/rdma-2": "1"
+              "networking.gke.io.networks/rdma-3": "1"
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["IPC_LOCK"]
+          volumeMounts:
+            - name: nsys-tools
+              mountPath: /nsys-tools
+            - name: scheduler-nvtx-patch
+              mountPath: /sglang_nvtx_patch
+              readOnly: true
+            - name: shared-model-cache
+              mountPath: /models
+            - name: dshm
+              mountPath: /dev/shm
+            - name: ib
+              mountPath: /dev/infiniband
+          workingDir: /workspace/
+      resourceClaims:
+        - name: compute-domain-channel
+          resourceClaimTemplateName: aic-sgl-native-105435-channel
+      volumes:
+        - name: nsys-tools
+          emptyDir: {}
+        - name: scheduler-nvtx-patch
+          configMap:
+            name: aic-sgl-native-105435-scheduler-nvtx-patch
+        - name: shared-model-cache
+          persistentVolumeClaim:
+            claimName: shared-model-cache
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 200Gi
+        - name: ib
+          hostPath:
+            path: /dev/infiniband
+            type: Directory
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aic-sgl-native-105435-router
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+      component: router
+  template:
+    metadata:
+      labels:
+        app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+        component: router
+    spec:
+      imagePullSecrets:
+        - name: nvcrimagepullsecret
+      nodeSelector:
+        kubernetes.io/arch: arm64
+        cloud.google.com/gke-nodepool: customer-gpu-w0e
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: user-workload
+          effect: NoExecute
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          operator: Equal
+          value: arm64
+          effect: NoSchedule
+      containers:
+        - name: router
+          image: lmsysorg/sglang:deepseek-v4-grace-blackwell
+          imagePullPolicy: Always
+          command:
+            - python3
+            - -m
+            - sglang_router.launch_router
+            - --pd-disaggregation
+            - --prefill
+            - http://aic-sgl-native-105435-prefill-leader.default.svc.cluster.local:30000
+            - "8998"
+            - --decode
+            - http://aic-sgl-native-105435-decode-leader.default.svc.cluster.local:30000
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aic-sgl-native-105435-router
+  namespace: default
+  labels:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: router
+spec:
+  selector:
+    app: aic-native-sglang-megamoe-sched-nvtx-20260508105435
+    component: router
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

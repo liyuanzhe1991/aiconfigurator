@@ -144,6 +144,7 @@ spec:
         _env("NUM_WARMUP", str(args.num_warmup)),
         _env("NUM_ITERATIONS", str(args.num_iterations)),
         _env("NUM_MAX_TOKENS_PER_RANK", str(num_max_tokens_per_rank)),
+        _env("WRITE_DEBUG_OUTPUT", str(args.write_debug_output)),
         _env("SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE", "1"),
         _env("SGLANG_OPT_FIX_HASH_MEGA_MOE", "1"),
         _env("SGLANG_OPT_FIX_MEGA_MOE_MEMORY", "1"),
@@ -279,7 +280,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-policy", choices=["random"], default="random")
     parser.add_argument("--routing-seed", type=int, default=0)
     parser.add_argument("--phases", default="context,generation")
-    parser.add_argument("--prefill-tokens", default="1024,2048,4096,8192,16384")
+    parser.add_argument("--prefill-tokens", default="1024,2048,4096,8192,16384,32768")
     parser.add_argument("--decode-tokens", default="1,2,4,8,16,32,64,128,256,512")
     parser.add_argument("--pre-dispatch", choices=["sglang_jit", "copy"], default="sglang_jit")
     parser.add_argument("--include-routed-scale", type=int, choices=[0, 1], default=1)
@@ -287,6 +288,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-warmup", type=int, default=5)
     parser.add_argument("--num-iterations", type=int, default=20)
     parser.add_argument("--num-max-tokens-per-rank", type=int, default=0)
+    parser.add_argument("--write-debug-output", type=int, choices=[0, 1], default=0)
     parser.add_argument("--env", action="append", default=[])
     parser.add_argument("--priority-class-name", default="")
     parser.add_argument("--compute-domain", action="store_true")

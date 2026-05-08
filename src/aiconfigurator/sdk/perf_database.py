@@ -1343,11 +1343,17 @@ def _dsv4_normalize_dtype(name: str) -> str:
 # When sglang eventually adds real V4 head sharding, drop this special-case
 # and the generic ``local_heads`` axis will work directly.
 DSV4_FLASH_NATIVE_HEADS = 64
+DSV4_PRO_NATIVE_HEADS = 128
+DSV4_NATIVE_HEADS_BY_HIDDEN_SIZE = {
+    4096: DSV4_FLASH_NATIVE_HEADS,
+    7168: DSV4_PRO_NATIVE_HEADS,
+}
 
 
-def _dsv4_flash_tp_from_num_heads(num_heads: int) -> int:
+def _dsv4_flash_tp_from_num_heads(num_heads: int, hidden_size: int | None = None) -> int:
     """Recover ``tp_size`` from the model layer's ``local_heads`` value."""
-    return max(1, DSV4_FLASH_NATIVE_HEADS // max(num_heads, 1))
+    native_heads = DSV4_NATIVE_HEADS_BY_HIDDEN_SIZE.get(int(hidden_size or 0), DSV4_FLASH_NATIVE_HEADS)
+    return max(1, native_heads // max(num_heads, 1))
 
 
 def _dsv4_flash_robust_3d_lookup(self, dict_, x, y, z):
@@ -1374,6 +1380,75 @@ def _dsv4_flash_robust_3d_lookup(self, dict_, x, y, z):
     exact = level2.get(z) if isinstance(level2, dict) else None
     if isinstance(exact, dict) and "latency" in exact:
         return exact
+
+    def _interp_leaf(left: dict, right: dict, left_coord: float, right_coord: float, coord: float) -> dict:
+        if left_coord == right_coord:
+            return dict(left)
+
+        def _interp_metric(metric: str) -> float:
+            v_left = float(left.get(metric, 0.0))
+            v_right = float(right.get(metric, 0.0))
+            return v_left + (v_right - v_left) / (right_coord - left_coord) * (coord - left_coord)
+
+        return {
+            "latency": _interp_metric("latency"),
+            "power": _interp_metric("power"),
+            "energy": _interp_metric("energy"),
+        }
+
+    if isinstance(level2, dict):
+        try:
+            z_left, z_right = self._nearest_1d_point_helper(z, list(level2.keys()))
+        except ValueError:
+            pass
+        else:
+            left = level2.get(z_left)
+            right = level2.get(z_right)
+            if (
+                isinstance(left, dict)
+                and isinstance(right, dict)
+                and "latency" in left
+                and "latency" in right
+            ):
+                return _interp_leaf(left, right, z_left, z_right, z)
+    if isinstance(level1, dict):
+        try:
+            y_left, y_right = self._nearest_1d_point_helper(y, list(level1.keys()))
+        except ValueError:
+            pass
+        else:
+            left = level1.get(y_left, {}).get(z)
+            right = level1.get(y_right, {}).get(z)
+            if (
+                isinstance(left, dict)
+                and isinstance(right, dict)
+                and "latency" in left
+                and "latency" in right
+            ):
+                return _interp_leaf(left, right, y_left, y_right, y)
+
+        points = []
+        leaves = []
+        for y_value, z_dict in level1.items():
+            if not isinstance(z_dict, dict):
+                continue
+            for z_value, leaf in z_dict.items():
+                if isinstance(leaf, dict) and "latency" in leaf:
+                    points.append([float(y_value), float(z_value)])
+                    leaves.append(leaf)
+        if len(points) >= 3:
+            points_array = np.array(points)
+            try:
+                result = {}
+                for metric in ("latency", "power", "energy"):
+                    values = np.array([float(leaf.get(metric, 0.0)) for leaf in leaves])
+                    value = interpolate.griddata(points_array, values, (float(y), float(z)), method="linear")
+                    if value is None or not np.isfinite(value):
+                        raise ValueError("linear interpolation returned a non-finite value")
+                    result[metric] = float(value)
+                return result
+            except Exception:
+                pass
     try:
         return self._interp_3d(x, y, z, dict_, "cubic")
     except Exception:
@@ -1948,6 +2023,17 @@ def load_dsv4_megamoe_module_data(dsv4_megamoe_module_file):
     def _to_bool(value: object) -> bool:
         return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
+    def _row_phases(row: dict[str, str]) -> list[str]:
+        phase = row.get("phase", "").strip()
+        if phase:
+            return [phase]
+        filename = os.path.basename(dsv4_megamoe_module_file)
+        if "context" in filename:
+            return ["context"]
+        if "generation" in filename:
+            return ["generation"]
+        return ["context", "generation"]
+
     def _put_nested(root: dict, keys: list[object], value: dict) -> None:
         current = root
         for key in keys[:-1]:
@@ -1980,9 +2066,6 @@ def load_dsv4_megamoe_module_data(dsv4_megamoe_module_file):
             kernel_source = row.get("kernel_source", "deepgemm_megamoe")
             kernel_dtype = row["kernel_dtype"]
             quant_mode = common.MoEQuantMode[row["moe_dtype"]]
-            system_name = row["system_name"]
-            gpus_per_node = int(row["gpus_per_node"])
-            num_nodes = int(row["num_nodes"])
             pre_dispatch = row["pre_dispatch"]
             source_policy = row["source_policy"]
             distribution = row["distribution"]
@@ -2006,18 +2089,14 @@ def load_dsv4_megamoe_module_data(dsv4_megamoe_module_file):
                 "latency": latency,
                 "power": power,
                 "energy": energy,
-                "phase": row.get("phase", ""),
-                "global_num_tokens": int(row["global_num_tokens"]),
-                "world_size": int(row["world_size"]),
-                "total_topk": int(row["total_topk"]),
-                "total_num_experts": int(row["total_num_experts"]),
+                "global_num_tokens": int(row.get("global_num_tokens") or num_tokens * moe_ep_size),
+                "total_topk": int(row.get("total_topk") or topk + num_fused_shared_experts),
+                "total_num_experts": int(row.get("total_num_experts") or num_experts + num_fused_shared_experts),
                 "num_max_tokens_per_rank": num_max_tokens_per_rank,
                 "effective_num_max_tokens_per_rank": effective_num_max_tokens_per_rank,
-                "local_selection_ratio": float(row["local_selection_ratio"]),
-                "remote_selection_ratio": float(row["remote_selection_ratio"]),
-                "bottleneck_rank": int(row["bottleneck_rank"]),
-                "rank_loads": row["rank_loads"],
-                "src_dst_matrix": row["src_dst_matrix"],
+                "local_selection_ratio": float(row.get("local_selection_ratio") or 0.0),
+                "remote_selection_ratio": float(row.get("remote_selection_ratio") or 0.0),
+                "bottleneck_rank": int(row.get("bottleneck_rank") or 0),
                 "used_cuda_graph": True,
                 "kernel_dtype": kernel_dtype,
                 "compute_operand_a": row.get("compute_operand_a", ""),
@@ -2025,31 +2104,35 @@ def load_dsv4_megamoe_module_data(dsv4_megamoe_module_file):
                 "accumulator_dtype": row.get("accumulator_dtype", ""),
                 "routed_scaling_factor": float(row["routed_scaling_factor"]),
                 "includes_routed_scale": True,
-                "norm_topk_prob": _to_bool(row["norm_topk_prob"]),
+                "includes_gate_topk": False,
+                "buffer_policy": row.get("buffer_policy", ""),
+                "includes_buffer_init": _to_bool(row.get("includes_buffer_init", "false")),
+                "norm_topk_prob": _to_bool(row.get("norm_topk_prob", "false")),
             }
-            _put_nested(
-                dsv4_megamoe_data,
-                [
-                    kernel_source,
-                    kernel_dtype,
-                    quant_mode,
-                    system_name,
-                    gpus_per_node,
-                    num_nodes,
-                    pre_dispatch,
-                    source_policy,
-                    distribution,
-                    topk,
-                    num_experts,
-                    num_fused_shared_experts,
-                    hidden_size,
-                    inter_size,
-                    moe_tp_size,
-                    moe_ep_size,
-                    num_tokens,
-                ],
-                entry,
-            )
+            for phase in _row_phases(row):
+                phase_entry = dict(entry)
+                phase_entry["phase"] = phase
+                _put_nested(
+                    dsv4_megamoe_data,
+                    [
+                        phase,
+                        kernel_source,
+                        kernel_dtype,
+                        quant_mode,
+                        pre_dispatch,
+                        source_policy,
+                        distribution,
+                        topk,
+                        num_experts,
+                        num_fused_shared_experts,
+                        hidden_size,
+                        inter_size,
+                        moe_tp_size,
+                        moe_ep_size,
+                        num_tokens,
+                    ],
+                    phase_entry,
+                )
 
     return dsv4_megamoe_data
 
@@ -3376,15 +3459,16 @@ class PerfDatabase:
         def _dsv4_megamoe_modes(data: dict | None) -> list[str]:
             """Collect MoE quant-mode names from DSv4 MegaMoE data.
 
-            The table is keyed ``kernel_source -> kernel_dtype -> quant_mode -> ...``.
+            The table is keyed ``phase -> kernel_source -> kernel_dtype -> quant_mode -> ...``.
             """
             if not data:
                 return []
             modes: set[str] = set()
-            for kernel_source in data:
-                for kernel_dtype in data[kernel_source]:
-                    for quant_mode in data[kernel_source][kernel_dtype]:
-                        modes.add(quant_mode.name if hasattr(quant_mode, "name") else str(quant_mode))
+            for phase in data:
+                for kernel_source in data[phase]:
+                    for kernel_dtype in data[phase][kernel_source]:
+                        for quant_mode in data[phase][kernel_source][kernel_dtype]:
+                            modes.add(quant_mode.name if hasattr(quant_mode, "name") else str(quant_mode))
             return sorted(modes)
 
         # For sglang backend, context_mla_data and generation_mla_data have kernel_source as first
@@ -5818,9 +5902,7 @@ class PerfDatabase:
 
         if not isinstance(quant_mode, common.MoEQuantMode):
             quant_mode = common.MoEQuantMode[str(quant_mode)]
-        system_name = system_name or self.system
-        gpus_per_node = int(gpus_per_node or self.system_spec["node"]["num_gpus_per_node"])
-        num_nodes = int(num_nodes or ((moe_ep_size + gpus_per_node - 1) // gpus_per_node))
+        phase = "context" if is_context else "generation"
 
         module_data = (
             self._dsv4_megamoe_context_module_data
@@ -5830,17 +5912,13 @@ class PerfDatabase:
         module_data.raise_if_not_loaded()
 
         try:
-            token_dict = module_data[kernel_source][kernel_dtype][quant_mode][system_name][gpus_per_node][num_nodes][
-                pre_dispatch
-            ][source_policy][workload_distribution][topk][num_experts][num_fused_shared_experts][hidden_size][
-                inter_size
-            ][moe_tp_size][moe_ep_size]
+            token_dict = module_data[phase][kernel_source][kernel_dtype][quant_mode][pre_dispatch][source_policy][
+                workload_distribution
+            ][topk][num_experts][num_fused_shared_experts][hidden_size][inter_size][moe_tp_size][moe_ep_size]
         except KeyError as exc:
-            phase = "context" if is_context else "generation"
             raise PerfDataNotAvailableError(
                 f"No DSv4 MegaMoE {phase} module data for {kernel_source=}, {kernel_dtype=}, {quant_mode=}, "
-                f"{system_name=}, {gpus_per_node=}, {num_nodes=}, {pre_dispatch=}, "
-                f"{source_policy=}, {workload_distribution=}, {topk=}, {num_experts=}, "
+                f"{pre_dispatch=}, {source_policy=}, {workload_distribution=}, {topk=}, {num_experts=}, "
                 f"{num_fused_shared_experts=}, {hidden_size=}, {inter_size=}, "
                 f"{moe_tp_size=}, {moe_ep_size=}."
             ) from exc
@@ -8104,7 +8182,9 @@ class PerfDatabase:
             # the actual tp_size for the lookup).  Other architectures are
             # unaffected; this branch only fires for DeepseekV4ForCausalLM.
             head_axis = (
-                _dsv4_flash_tp_from_num_heads(num_heads) if architecture == "DeepseekV4ForCausalLM" else num_heads
+                _dsv4_flash_tp_from_num_heads(num_heads, hidden_size=hidden_size)
+                if architecture == "DeepseekV4ForCausalLM"
+                else num_heads
             )
 
             # Pick correction strategy up-front because it changes the lookup
@@ -8285,7 +8365,9 @@ class PerfDatabase:
             # V4-Flash special-case: data keyed by ``tp_size`` (heads aren't
             # actually sharded — see note at top of file).
             head_axis = (
-                _dsv4_flash_tp_from_num_heads(num_heads) if architecture == "DeepseekV4ForCausalLM" else num_heads
+                _dsv4_flash_tp_from_num_heads(num_heads, hidden_size=hidden_size)
+                if architecture == "DeepseekV4ForCausalLM"
+                else num_heads
             )
             # V4-Flash robust lookup (exact → cubic → linear) — see helper
             # docstring; generic ``_interp_3d`` left untouched for others.

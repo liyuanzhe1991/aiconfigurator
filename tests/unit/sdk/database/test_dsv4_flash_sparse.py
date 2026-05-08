@@ -99,6 +99,14 @@ def test_dsv4_flash_tp_from_num_heads_edge_cases():
     assert DSV4_FLASH_NATIVE_HEADS == 64
 
 
+@pytest.mark.parametrize(
+    "num_heads,expected_tp",
+    [(128, 1), (64, 2), (32, 4), (16, 8)],
+)
+def test_dsv4_pro_tp_from_num_heads_uses_pro_hidden_size(num_heads, expected_tp):
+    assert _dsv4_flash_tp_from_num_heads(num_heads, hidden_size=7168) == expected_tp
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Loader: sparse-kernel CSV
 # ───────────────────────────────────────────────────────────────────────
@@ -227,6 +235,96 @@ def test_robust_3d_lookup_exact_match_short_circuits():
     data = {8: {8192: {1: {"latency": 11.7, "energy": 0.0}}}}
     result = _dsv4_flash_robust_3d_lookup(_Stub(), data, 8, 8192, 1)
     assert result["latency"] == pytest.approx(11.7)
+
+
+def test_robust_3d_lookup_interpolates_third_axis_when_first_two_axes_are_exact():
+    """Cap-filtered DSV4 grids are not rectangular across batch/sequence.
+
+    If the first two axes are exact, interpolate within that exact slice
+    instead of forcing generic 3D interpolation to include an adjacent slice
+    that may not contain the requested third-axis range.
+    """
+
+    from aiconfigurator.sdk.perf_database import PerfDatabase
+
+    class _Stub:
+        def _nearest_1d_point_helper(self, *args, **kwargs):
+            return PerfDatabase._nearest_1d_point_helper(self, *args, **kwargs)
+
+        def _interp_3d(self, *a, **kw):
+            raise AssertionError("must not call _interp_3d when exact 2-axis slice exists")
+
+    data = {
+        8: {
+            512: {
+                1025: {"latency": 1.0, "power": 2.0, "energy": 2.0},
+                1537: {"latency": 2.0, "power": 4.0, "energy": 8.0},
+            },
+            # Adjacent batch slice is intentionally capped at 1025; generic
+            # 3D interpolation would fail for z=1057 on this non-rectangular grid.
+            1024: {1025: {"latency": 3.0, "power": 6.0, "energy": 18.0}},
+        }
+    }
+
+    result = _dsv4_flash_robust_3d_lookup(_Stub(), data, 8, 512, 1057)
+    assert result["latency"] == pytest.approx(1.0625)
+    assert result["power"] == pytest.approx(2.125)
+    assert result["energy"] == pytest.approx(2.375)
+
+
+def test_robust_3d_lookup_interpolates_second_axis_when_first_and_third_axes_are_exact():
+    from aiconfigurator.sdk.perf_database import PerfDatabase
+
+    class _Stub:
+        def _nearest_1d_point_helper(self, *args, **kwargs):
+            return PerfDatabase._nearest_1d_point_helper(self, *args, **kwargs)
+
+        def _interp_3d(self, *a, **kw):
+            raise AssertionError("must not call _interp_3d when exact 2-axis slice exists")
+
+    data = {
+        8: {
+            6144: {1: {"latency": 6.0, "power": 2.0, "energy": 12.0}},
+            8192: {1: {"latency": 8.0, "power": 4.0, "energy": 32.0}},
+        }
+    }
+
+    result = _dsv4_flash_robust_3d_lookup(_Stub(), data, 8, 6145, 1)
+    assert result["latency"] == pytest.approx(6.0009765625)
+    assert result["power"] == pytest.approx(2.0009765625)
+    assert result["energy"] == pytest.approx(12.009765625)
+
+
+def test_robust_3d_lookup_uses_exact_first_axis_scattered_2d_interp_for_capped_grid():
+    from aiconfigurator.sdk.perf_database import PerfDatabase
+
+    class _Stub:
+        def _nearest_1d_point_helper(self, *args, **kwargs):
+            return PerfDatabase._nearest_1d_point_helper(self, *args, **kwargs)
+
+        def _interp_3d(self, *a, **kw):
+            raise AssertionError("must not call generic 3D interpolation for exact first-axis slice")
+
+    def _leaf(y, z):
+        value = y + z
+        return {"latency": float(value), "power": float(value * 2), "energy": float(value * 3)}
+
+    data = {
+        8: {
+            512: {
+                1025: _leaf(512, 1025),
+                1537: _leaf(512, 1537),
+            },
+            1024: {
+                1025: _leaf(1024, 1025),
+            },
+        }
+    }
+
+    result = _dsv4_flash_robust_3d_lookup(_Stub(), data, 8, 574, 1281)
+    assert result["latency"] == pytest.approx(1855.0)
+    assert result["power"] == pytest.approx(3710.0)
+    assert result["energy"] == pytest.approx(5565.0)
 
 
 def test_robust_3d_lookup_falls_back_to_linear_when_cubic_fails():
@@ -386,6 +484,19 @@ def test_dsv4_flash_test_cases_active_under_v4_filter(monkeypatch):
     assert {c[6] for c in cases} == {"deepseek-ai/DeepSeek-V4-Flash"}
     # all cases for this op are CSA
     assert {c[7] for c in cases} == {"csa"}
+
+
+def test_dsv4_module_test_cases_active_under_v4_pro_filter(monkeypatch):
+    monkeypatch.setenv("COLLECTOR_MODEL_PATH", "deepseek-ai/DeepSeek-V4-Pro")
+    from collector.common_test_cases import (
+        get_dsv4_flash_csa_context_test_cases,
+        get_dsv4_flash_paged_mqa_logits_test_cases,
+    )
+
+    cases = get_dsv4_flash_csa_context_test_cases()
+    assert len(cases) > 0
+    assert {c[6] for c in cases} == {"deepseek-ai/DeepSeek-V4-Pro"}
+    assert get_dsv4_flash_paged_mqa_logits_test_cases() == []
 
 
 def test_dsv4_flash_sparse_test_cases_only_indexer_tp1(monkeypatch):

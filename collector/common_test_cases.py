@@ -736,13 +736,34 @@ def get_common_gdn_test_cases() -> list[GdnCommonTestCase]:
 # can resolve them via getattr on each per-backend module.
 
 _DSV4_FLASH_DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Flash"
+_DSV4_MODULE_DEFAULT_MODEL = _DSV4_FLASH_DEFAULT_MODEL
+_DSV4_MODULE_MODELS = {
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "sgl-project/DeepSeek-V4-Flash-FP8",
+    "sgl-project/DeepSeek-V4-Pro-FP8",
+}
 DSV4_FLASH_ATTN_KINDS = ("csa", "hca")
+
+
+def _dsv4_module_model_paths() -> list[str]:
+    """Return DSv4 attention-module models selected by COLLECTOR_MODEL_PATH.
+
+    With no model filter, keep the historical V4-Flash default to avoid
+    doubling the default full collector sweep.  An explicit V4-Pro filter is
+    accepted so DSv4-Pro silicon data can be collected with the standard
+    registry path.
+    """
+    filt = _get_model_path_filter()
+    if filt is None:
+        return [_DSV4_MODULE_DEFAULT_MODEL]
+    return [filt] if filt in _DSV4_MODULE_MODELS else []
 
 
 def _dsv4_flash_active() -> bool:
     """Honour the ``--model-path`` (``COLLECTOR_MODEL_PATH``) filter.
 
-    All V4-Flash test cases are V4-Flash-only by construction.  When the
+    Sparse-kernel V4-Flash test cases are V4-Flash-only by construction.  When the
     user filters to a different model, every V4-Flash op must emit zero
     cases so the collector skips it.
     """
@@ -859,47 +880,40 @@ def _build_dsv4_flash_module_test_cases(mode: str, attn_kinds=DSV4_FLASH_ATTN_KI
     bs_set = sorted({bs for bs, _ in pairs})
 
     cases: list[list] = []
-    for attn_kind in attn_kinds:
-        for compute_dtype, kv_dtype, gemm_type in _dsv4_flash_module_precision_combos(mode):
-            for tp_size in _DSV4_FLASH_MODULE_TP_SIZES:
-                for bs in bs_set:
-                    cases.append(
-                        [
-                            0,
-                            bs,
-                            tp_size,
-                            kv_dtype,
-                            compute_dtype,
-                            gemm_type,
-                            _DSV4_FLASH_DEFAULT_MODEL,
-                            attn_kind,
-                            None,
-                        ]
-                    )
+    for model_path in _dsv4_module_model_paths():
+        for attn_kind in attn_kinds:
+            for compute_dtype, kv_dtype, gemm_type in _dsv4_flash_module_precision_combos(mode):
+                for tp_size in _DSV4_FLASH_MODULE_TP_SIZES:
+                    for bs in bs_set:
+                        cases.append(
+                            [
+                                0,
+                                bs,
+                                tp_size,
+                                kv_dtype,
+                                compute_dtype,
+                                gemm_type,
+                                model_path,
+                                attn_kind,
+                                None,
+                            ]
+                        )
     return cases
 
 
 def get_dsv4_flash_csa_context_test_cases():
-    if not _dsv4_flash_active():
-        return []
     return _build_dsv4_flash_module_test_cases("context", ("csa",))
 
 
 def get_dsv4_flash_hca_context_test_cases():
-    if not _dsv4_flash_active():
-        return []
     return _build_dsv4_flash_module_test_cases("context", ("hca",))
 
 
 def get_dsv4_flash_csa_generation_test_cases():
-    if not _dsv4_flash_active():
-        return []
     return _build_dsv4_flash_module_test_cases("generation", ("csa",))
 
 
 def get_dsv4_flash_hca_generation_test_cases():
-    if not _dsv4_flash_active():
-        return []
     return _build_dsv4_flash_module_test_cases("generation", ("hca",))
 
 

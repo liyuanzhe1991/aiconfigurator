@@ -200,6 +200,16 @@ def _ensure_munch(obj: dict | DefaultMunch | Munch) -> DefaultMunch:
     return DefaultMunch.fromDict(obj, DefaultMunch)
 
 
+def _config_get(obj: object, key: str, default: Any = None) -> Any:
+    """Read config values without treating DefaultMunch's missing-value sentinel as set."""
+    if isinstance(obj, Mapping):
+        return obj.get(key, default)
+    value = getattr(obj, key, default)
+    if value is DefaultMunch:
+        return default
+    return value
+
+
 def build_disagg_parallel_lists(
     backend_name: str,
     prefill_system: str,
@@ -1036,8 +1046,9 @@ class TaskConfig:
             for k, v in quant_modes.items():
                 worker_cfg[k] = v
 
-        enable_wideep = bool(getattr(self.config, "enable_wideep", self.enable_wideep))
-        moe_backend = getattr(self.config, "moe_backend", None)
+        cfg_enable_wideep = _get_cfg_value(self.config, "enable_wideep")
+        enable_wideep = bool(self.enable_wideep if cfg_enable_wideep is None else cfg_enable_wideep)
+        moe_backend = _get_cfg_value(self.config, "moe_backend") or self.moe_backend
 
         # DeepSeek uses MLA perf tables; others use attention perf tables.
         # vLLM absorbs MLA KV projections into standard attention kernels, so it
@@ -1067,7 +1078,7 @@ class TaskConfig:
             _supported_or_raise("gemm", gemm_mode)
 
             moe_mode = _to_name(_get_cfg_value(wc, "moe_quant_mode"))
-            wc_moe_backend = getattr(wc, "moe_backend", None) or moe_backend
+            wc_moe_backend = _get_cfg_value(wc, "moe_backend") or moe_backend
             if self.backend_name == "sglang" and wc_moe_backend == "megamoe":
                 if not is_deepseek_v4:
                     raise ValueError("moe_backend='megamoe' is currently supported only for DeepSeek-V4 models.")
@@ -1276,12 +1287,15 @@ class TaskRunner:
             )
             return None
         logger.debug("Task %s: Setting up model config", task_config.task_name)
+        task_workload_distribution = _config_get(task_config, "workload_distribution", "power_law")
+        worker_workload_distribution = _config_get(task_config.worker_config, "workload_distribution", None)
         model_config = config.ModelConfig(
             gemm_quant_mode=task_config.worker_config.gemm_quant_mode,
             kvcache_quant_mode=task_config.worker_config.kvcache_quant_mode,
             fmha_quant_mode=task_config.worker_config.fmha_quant_mode,
             moe_quant_mode=task_config.worker_config.moe_quant_mode,
             comm_quant_mode=task_config.worker_config.comm_quant_mode,
+            workload_distribution=worker_workload_distribution or task_workload_distribution,
             nextn=task_config.nextn,
             nextn_accept_rates=task_config.nextn_accept_rates,
             moe_backend=task_config.moe_backend,  # sglang wideep only
@@ -1352,7 +1366,7 @@ class TaskRunner:
 
         def _wc_get(wc: object, key: str, fallback):
             """Read from worker_config; treat None/missing as 'not set'."""
-            val = getattr(wc, key, None)
+            val = _config_get(wc, key, None)
             return val if val is not None else fallback
 
         _pwc = task_config.prefill_worker_config
@@ -1361,10 +1375,13 @@ class TaskRunner:
         prefill_enable_eplb = _wc_get(_pwc, "enable_eplb", getattr(task_config, "enable_eplb", False))
         prefill_moe_backend = _wc_get(_pwc, "moe_backend", task_config.moe_backend)
         prefill_attention_backend = _wc_get(_pwc, "attention_backend", task_config.attention_backend)
+        task_workload_distribution = _config_get(task_config, "workload_distribution", "power_law")
+        prefill_workload_distribution = _wc_get(_pwc, "workload_distribution", task_workload_distribution)
         decode_enable_wideep = _wc_get(_dwc, "enable_wideep", task_config.enable_wideep)
         decode_enable_eplb = _wc_get(_dwc, "enable_eplb", getattr(task_config, "enable_eplb", False))
         decode_moe_backend = _wc_get(_dwc, "moe_backend", task_config.moe_backend)
         decode_attention_backend = _wc_get(_dwc, "attention_backend", task_config.attention_backend)
+        decode_workload_distribution = _wc_get(_dwc, "workload_distribution", task_workload_distribution)
 
         logger.debug("Task %s: Setting up prefill database", task_config.task_name)
         try:
@@ -1391,6 +1408,7 @@ class TaskRunner:
             fmha_quant_mode=task_config.prefill_worker_config.fmha_quant_mode,
             moe_quant_mode=task_config.prefill_worker_config.moe_quant_mode,
             comm_quant_mode=task_config.prefill_worker_config.comm_quant_mode,
+            workload_distribution=prefill_workload_distribution,
             nextn=task_config.nextn,
             nextn_accept_rates=task_config.nextn_accept_rates,
             moe_backend=prefill_moe_backend,
@@ -1453,6 +1471,7 @@ class TaskRunner:
             fmha_quant_mode=task_config.decode_worker_config.fmha_quant_mode,
             moe_quant_mode=task_config.decode_worker_config.moe_quant_mode,
             comm_quant_mode=task_config.decode_worker_config.comm_quant_mode,
+            workload_distribution=decode_workload_distribution,
             nextn=task_config.nextn,
             nextn_accept_rates=task_config.nextn_accept_rates,
             moe_backend=decode_moe_backend,

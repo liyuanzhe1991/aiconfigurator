@@ -17,7 +17,7 @@ DISTRIBUTIONS="${DISTRIBUTIONS:-balanced,power_law_1.01,power_law_1.2}"
 SOURCE_POLICY="${SOURCE_POLICY:-random}"
 ROUTING_SEED="${ROUTING_SEED:-0}"
 PHASES="${PHASES:-context,generation}"
-PREFILL_TOKENS="${PREFILL_TOKENS:-1024,2048,4096,8192,16384}"
+PREFILL_TOKENS="${PREFILL_TOKENS:-1024,2048,4096,8192,16384,32768}"
 DECODE_TOKENS="${DECODE_TOKENS:-1,2,4,8,16,32,64,128,256,512}"
 PRE_DISPATCH="${PRE_DISPATCH:-sglang_jit}"
 INCLUDE_ROUTED_SCALE="${INCLUDE_ROUTED_SCALE:-1}"
@@ -25,6 +25,7 @@ RENORMALIZE_TOPK_WEIGHTS="${RENORMALIZE_TOPK_WEIGHTS:-1}"
 NUM_WARMUP="${NUM_WARMUP:-5}"
 NUM_ITERATIONS="${NUM_ITERATIONS:-20}"
 NUM_MAX_TOKENS_PER_RANK="${NUM_MAX_TOKENS_PER_RANK:-0}"
+WRITE_DEBUG_OUTPUT="${WRITE_DEBUG_OUTPUT:-${AIC_DSV4_MEGAMOE_DEBUG:-0}}"
 PERF_FILE="${PERF_FILE:-dsv4_megamoe_module_perf.txt}"
 
 MAX_CASE_TOKENS=0
@@ -120,10 +121,19 @@ RUN_CMD=(
   --num-warmup "${NUM_WARMUP}" \
   --num-iterations "${NUM_ITERATIONS}" \
   --output-path "${OUTPUT_PATH}" \
+  --write-debug-output "${WRITE_DEBUG_OUTPUT}" \
   --perf-file "${PERF_FILE}"
 )
 
 if [[ "${AIC_NSYS_PROFILE:-0}" == "1" ]]; then
+  if ! command -v nsys >/dev/null 2>&1 && [[ -d /nsys-tools ]]; then
+    for nsys_bin in /nsys-tools/NsightSystems-cli-*/target-linux-sbsa-armv8/nsys /nsys-tools/NsightSystems-cli-*/target-linux-x64/nsys; do
+      if [[ -x "${nsys_bin}" ]]; then
+        export PATH="$(dirname "${nsys_bin}"):${PATH}"
+        break
+      fi
+    done
+  fi
   if ! command -v nsys >/dev/null 2>&1; then
     echo "AIC_NSYS_PROFILE=1 but nsys is not available in PATH" >&2
     exit 1
@@ -139,6 +149,7 @@ if [[ "${AIC_NSYS_PROFILE:-0}" == "1" ]]; then
     --cpuctxsw=none \
     --capture-range=cudaProfilerApi \
     --capture-range-end=stop \
+    --trace-fork-before-exec=true \
     --cuda-graph-trace=node \
     --output="${NSYS_OUTPUT}" \
     "${RUN_CMD[@]}"

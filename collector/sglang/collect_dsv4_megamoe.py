@@ -19,6 +19,7 @@ cached-buffer steady state.
 from __future__ import annotations
 
 import argparse
+import json
 import inspect
 import os
 import socket
@@ -32,6 +33,7 @@ try:
     from collector.helper import benchmark_with_power, log_perf
     from collector.sglang.dsv4_megamoe_workload import (
         SUPPORTED_DISTRIBUTIONS,
+        SUPPORTED_SOURCE_POLICIES,
         append_fused_shared_experts,
         build_routing_plan,
         parse_int_list,
@@ -41,6 +43,7 @@ except ImportError:
     from helper import benchmark_with_power, log_perf
     from dsv4_megamoe_workload import (
         SUPPORTED_DISTRIBUTIONS,
+        SUPPORTED_SOURCE_POLICIES,
         append_fused_shared_experts,
         build_routing_plan,
         parse_int_list,
@@ -78,7 +81,7 @@ DEFAULT_GPUS_PER_NODE = {
 }
 
 DEFAULT_DISTRIBUTIONS = "balanced,power_law_1.01,power_law_1.2"
-DEFAULT_PREFILL_TOKENS = "1024,2048,4096,8192,16384"
+DEFAULT_PREFILL_TOKENS = "1024,2048,4096,8192,16384,32768"
 DEFAULT_DECODE_TOKENS = "1,2,4,8,16,32,64,128,256,512"
 DEFAULT_NUM_MAX_TOKENS_PER_RANK = 0
 DEFAULT_MODULE_PERF = PerfFile.DSV4_MEGAMOE_MODULE.value
@@ -90,6 +93,7 @@ DEFAULT_COMPUTE_OPERAND_A = "fp8_e4m3"
 DEFAULT_COMPUTE_OPERAND_B = "fp4_e2m1"
 DEFAULT_ACCUMULATOR_DTYPE = "fp32"
 BUFFER_POLICY = "cached_sglang"
+DEBUG_FILENAME = "dsv4_megamoe_module_debug.jsonl"
 _MEGA_MOE_BUFFER_CACHE = {}
 
 
@@ -227,6 +231,23 @@ def _torch_profile_path(case: MegaMoECase, rank: int) -> str | None:
     os.makedirs(profile_dir, exist_ok=True)
     name = f"{case.phase}_tokens{case.tokens_per_rank}_{case.distribution}_rank{rank}.json"
     return os.path.join(profile_dir, name)
+
+
+def _write_debug_row(output_path: str, row: dict[str, object]) -> None:
+    debug_path = os.path.join(output_path, DEBUG_FILENAME)
+    with open(debug_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _env_flag(name: str, default: str = "0") -> int:
+    value = os.environ.get(name, default).strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return 1
+    if value in {"0", "false", "no", "n", "off"}:
+        return 0
+    raise ValueError(f"{name} must be a boolean flag, got {value!r}")
 
 
 def _parse_distributions(value: str) -> list[str]:
@@ -569,43 +590,72 @@ def run_case(
     if rank != 0:
         return None
 
+    plan_metadata = plan.metadata()
     row = {
-        "model": model_config["model"],
         "phase": case.phase,
         "moe_dtype": DEFAULT_MOE_DTYPE,
         "kernel_dtype": DEFAULT_KERNEL_DTYPE,
-        "compute_operand_a": DEFAULT_COMPUTE_OPERAND_A,
-        "compute_operand_b": DEFAULT_COMPUTE_OPERAND_B,
-        "accumulator_dtype": DEFAULT_ACCUMULATOR_DTYPE,
-        "routed_scaling_factor": routed_scaling_factor,
-        "includes_routed_scale": str(bool(args.include_routed_scale)).lower(),
         "num_tokens": case.tokens_per_rank,
         "global_num_tokens": plan.global_num_tokens,
         "hidden_size": hidden_size,
         "inter_size": inter_size,
         "topk": routed_topk,
-        "total_topk": total_topk,
         "num_experts": routed_num_experts,
-        "total_num_experts": total_num_experts,
         "num_fused_shared_experts": num_fused_shared_experts,
         "moe_tp_size": 1,
         "moe_ep_size": ep_size,
-        "world_size": dist_info.world_size,
-        "num_nodes": dist_info.num_nodes,
-        "gpus_per_node": dist_info.gpus_per_node,
-        "system_name": args.system_name,
+        "distribution": case.distribution,
+        "source_policy": args.source_policy,
+        "pre_dispatch": args.pre_dispatch,
         "num_max_tokens_per_rank": args.num_max_tokens_per_rank,
         "effective_num_max_tokens_per_rank": effective_num_max_tokens_per_rank,
-        "pre_dispatch": args.pre_dispatch,
+        "routed_scaling_factor": routed_scaling_factor,
+        "includes_routed_scale": str(bool(args.include_routed_scale)).lower(),
         "includes_gate_topk": "false",
         "buffer_policy": BUFFER_POLICY,
-        "buffer_lookup_in_timed_callable": "true",
         "includes_buffer_init": "false",
         "used_cuda_graph": "true",
         "latency": f"{latency:.6f}",
-        "rank0_latency": f"{local_latency:.6f}",
     }
-    row.update(plan.metadata())
+    if args.write_debug_output:
+        debug_row = {
+            "model": model_config["model"],
+            "phase": case.phase,
+            "moe_dtype": DEFAULT_MOE_DTYPE,
+            "kernel_dtype": DEFAULT_KERNEL_DTYPE,
+            "compute_operand_a": DEFAULT_COMPUTE_OPERAND_A,
+            "compute_operand_b": DEFAULT_COMPUTE_OPERAND_B,
+            "accumulator_dtype": DEFAULT_ACCUMULATOR_DTYPE,
+            "routed_scaling_factor": routed_scaling_factor,
+            "includes_routed_scale": str(bool(args.include_routed_scale)).lower(),
+            "num_tokens": case.tokens_per_rank,
+            "global_num_tokens": plan.global_num_tokens,
+            "hidden_size": hidden_size,
+            "inter_size": inter_size,
+            "topk": routed_topk,
+            "total_topk": total_topk,
+            "num_experts": routed_num_experts,
+            "total_num_experts": total_num_experts,
+            "num_fused_shared_experts": num_fused_shared_experts,
+            "moe_tp_size": 1,
+            "moe_ep_size": ep_size,
+            "world_size": dist_info.world_size,
+            "num_nodes": dist_info.num_nodes,
+            "gpus_per_node": dist_info.gpus_per_node,
+            "system_name": args.system_name,
+            "num_max_tokens_per_rank": args.num_max_tokens_per_rank,
+            "effective_num_max_tokens_per_rank": effective_num_max_tokens_per_rank,
+            "pre_dispatch": args.pre_dispatch,
+            "includes_gate_topk": "false",
+            "buffer_policy": BUFFER_POLICY,
+            "buffer_lookup_in_timed_callable": "true",
+            "includes_buffer_init": "false",
+            "used_cuda_graph": "true",
+            "latency": f"{latency:.6f}",
+            "rank0_latency": f"{local_latency:.6f}",
+            **plan_metadata,
+        }
+        _write_debug_row(args.output_path, debug_row)
     log_perf(
         item_list=[row],
         framework="SGLang",
@@ -633,7 +683,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prefill-tokens", default=DEFAULT_PREFILL_TOKENS)
     parser.add_argument("--decode-tokens", default=DEFAULT_DECODE_TOKENS)
     parser.add_argument("--distributions", default=DEFAULT_DISTRIBUTIONS)
-    parser.add_argument("--source-policy", choices=["random"], default="random")
+    parser.add_argument("--source-policy", choices=SUPPORTED_SOURCE_POLICIES, default="random")
     parser.add_argument("--routing-seed", type=int, default=0)
     parser.add_argument("--num-fused-shared-experts", type=int, default=0)
     parser.add_argument("--routed-scaling-factor", type=float, default=None)
@@ -647,6 +697,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-iterations", type=int, default=20)
     parser.add_argument("--output-path", default=os.getcwd())
     parser.add_argument("--perf-file", default=DEFAULT_MODULE_PERF)
+    parser.add_argument("--write-debug-output", type=int, choices=[0, 1], default=_env_flag("AIC_DSV4_MEGAMOE_DEBUG"))
     parser.add_argument("--context-perf", default=DEFAULT_CONTEXT_PERF, help=argparse.SUPPRESS)
     parser.add_argument("--generation-perf", default=DEFAULT_GENERATION_PERF, help=argparse.SUPPRESS)
     parser.add_argument("--sglang-version", default=os.environ.get("SGLANG_VERSION", "unknown"))
