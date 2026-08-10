@@ -123,7 +123,11 @@ CMD=("$PYTHON" collector/collect.py
   --model-cache "$CACHE"
   --image-pull-secret nvcr-push-secret
   --generator-set "K8sConfig.k8s_image=$IMAGE"
-  ${EXTRA_SETS[@]+"${EXTRA_SETS[@]}"} ${ORCH[@]+"${ORCH[@]}"} ${MODE_FLAGS[@]+"${MODE_FLAGS[@]}"} --limit "$LIMIT")
+  ${EXTRA_SETS[@]+"${EXTRA_SETS[@]}"} ${ORCH[@]+"${ORCH[@]}"} ${MODE_FLAGS[@]+"${MODE_FLAGS[@]}"})
+# --limit is a smoke-only knob: formal collections must run their full plan
+# (the CLI rejects the combination), and the pinned preset/tp keeps the
+# formal plan to a single cell anyway.
+(( ${#MODE_FLAGS[@]} )) && CMD+=(--limit "$LIMIT")
 (( GPUS == 16 )) && CMD+=(--fpm-dp-sizes 1)   # 16 卡钉死 TEP16/DP1
 
 echo "== cluster=$CLUSTER | gpus=$GPUS | model=$MODEL_KEY | ${MODE_FLAGS[*]:-formal} =="
