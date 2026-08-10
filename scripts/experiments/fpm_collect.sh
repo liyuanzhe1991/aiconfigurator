@@ -42,13 +42,16 @@ IMAGE_REPO=nvcr.io/0980761089281446/dynamo-fpm-frozen
 case "$MODEL_KEY" in
   m27)
     MODEL_PATH=MiniMaxAI/MiniMax-M2.7
-    SNAPSHOT=models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b ;;
+    SNAPSHOT=models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b
+    PRESET=tep ;;
   glm-nvfp4)
     MODEL_PATH=nvidia/GLM-5.2-NVFP4
-    SNAPSHOT=models--nvidia--GLM-5.2-NVFP4/snapshots/aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa ;;
+    SNAPSHOT=models--nvidia--GLM-5.2-NVFP4/snapshots/aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
+    PRESET=tep ;;
   qwen32b)
     MODEL_PATH=Qwen/Qwen3-32B
-    SNAPSHOT=models--Qwen--Qwen3-32B ;;
+    SNAPSHOT=models--Qwen--Qwen3-32B/snapshots/9216db5781bf21249d130ec9da846c4624c16137
+    PRESET=tp ;;   # dense model -> dense TP family
   *) echo "未知模型: $MODEL_KEY" >&2; exit 2 ;;
 esac
 
@@ -115,7 +118,7 @@ CMD=("$PYTHON" collector/collect.py
   --backend vllm --ops fpm_forward
   --model-path "$MODEL_PATH"
   --gpu "$GPU_PROFILE"
-  --fpm-max-gpus "$GPUS" --fpm-parallel-presets tep --fpm-tp-sizes "$GPUS"
+  --fpm-max-gpus "$GPUS" --fpm-parallel-presets "$PRESET" --fpm-tp-sizes "$GPUS"
   --namespace "$NAMESPACE"
   --model-cache "$CACHE"
   --image-pull-secret nvcr-push-secret
