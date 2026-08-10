@@ -123,7 +123,7 @@ CMD=("$PYTHON" collector/collect.py
   "${EXTRA_SETS[@]}" "${ORCH[@]}" "${MODE_FLAGS[@]}" --limit "$LIMIT")
 (( GPUS == 16 )) && CMD+=(--fpm-dp-sizes 1)   # 16 卡钉死 TEP16/DP1
 
-echo "== 集群 $CLUSTER | ${GPUS}卡 | $MODEL_KEY | ${MODE_FLAGS[*]:-formal} =="
+echo "== cluster=$CLUSTER | gpus=$GPUS | model=$MODEL_KEY | ${MODE_FLAGS[*]:-formal} =="
 if (( DRY_RUN )); then printf '%q ' "FPM_KUBECTL=kubectl --context=$CTX" "${CMD[@]}"; echo; exit 0; fi
 
 cd "$REPO_ROOT"
@@ -133,6 +133,6 @@ export PYTHONPATH=$REPO_ROOT/src:$REPO_ROOT/aic-core/src${PYTHONPATH:+:$PYTHONPA
 RC=$?
 
 # ---------- 收尾验证(集群清理铁律)----------
-echo '== 残留验证 =='
-kubectl --context="$CTX" get pods -n "$NAMESPACE" 2>/dev/null | grep fpm- || echo '零残留 ✓'
+echo '== residue check =='
+kubectl --context="$CTX" get pods -n "$NAMESPACE" 2>/dev/null | grep fpm- || echo 'zero residue OK'
 exit $RC
