@@ -48,7 +48,20 @@ Warning: `tsh logout` (or expiry) wipes **all** kube contexts — rerun the `for
 
 ```bash
 export FPM_PYTHON=/path/to/venv/bin/python   # a venv with the collector dependencies
-$FPM_PYTHON -c "import kubernetes, yaml; print('venv OK')"
+PYTHONPATH=$PWD/src:$PWD/aic-core/src $FPM_PYTHON collector/collect.py --help | head -2
+```
+
+Expect: the usage text, with `fpm_forward` in the ops list. (The collector shells out
+to kubectl — there is no Python kubernetes-client dependency.)
+
+**Required: the compiled native core.** Real runs import the SDK, which loads the Rust
+extension `aic-core/src/aiconfigurator_core/_aiconfigurator_core.abi3.so` (a gitignored
+build artifact — a fresh clone does not have it). Provide it once per worktree, either by
+building (`cd aic-core/rust/aiconfigurator-core && maturin develop`) or by copying the file
+from any existing build/wheel of the same revision. Verify with:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/aic-core/src $FPM_PYTHON -c "import aiconfigurator.sdk.common; print('sdk OK')"
 ```
 
 ### Step 3: verify cluster prerequisites (once per cluster, ever)
