@@ -201,11 +201,12 @@ Concrete recipes:
 # TEP16, one DP replica (the validated 16-GPU shape) — what the script does:
 --fpm-parallel-presets tep --fpm-tp-sizes 16 --fpm-dp-sizes 1 --fpm-max-gpus 16
 
-# DEP16 (expert-parallel with DP sharding) — edit the CMD array to:
+# DEP16 (expert-parallel, DP-sharded across all 16 GPUs):
 --fpm-parallel-presets dep --fpm-dp-sizes 16 --fpm-max-gpus 16
 
-# TEP8 x DP2 on 16 GPUs (mixed shape):
---fpm-parallel-presets tep --fpm-tp-sizes 8 --fpm-dp-sizes 2 --fpm-max-gpus 16
+# Mixed shape, 2 DP replicas x 8 GPUs each — use the dep family; the CLI
+# rejects --fpm-dp-sizes together with tep (dp filters only apply to dep):
+--fpm-parallel-presets dep --fpm-dp-sizes 2 --fpm-max-gpus 16
 
 # Dense model with plain TP (e.g. qwen32b):
 --fpm-parallel-presets tp --fpm-tp-sizes 8 --fpm-max-gpus 8
