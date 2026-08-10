@@ -84,7 +84,7 @@ case "$CLUSTER" in
     ORCH=(--fpm-orchestrator grove --transport nvlink)
     # 已知病节点黑名单(2026-08-10 IMEX 事故;集群修复后可移除)
     EXTRA_SETS+=("--generator-set" 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"default-queue"}')
-    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["ip-100-64-148-63.ec2.internal","ip-100-64-173-248.ec2.internal"]}]}]}}}}')
+    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["ip-100-64-148-63.ec2.internal","ip-100-64-173-248.ec2.internal","ip-100-64-174-195.ec2.internal","ip-100-64-226-152.ec2.internal"]}]}]}}}}')
     ;;
   b200)
     CTX=nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster
