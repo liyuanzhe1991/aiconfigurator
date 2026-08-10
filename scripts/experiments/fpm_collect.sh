@@ -81,7 +81,7 @@ case "$CLUSTER" in
     ORCH=(--fpm-orchestrator grove --transport nvlink)
     # 已知病节点黑名单(2026-08-10 IMEX 事故;集群修复后可移除)
     EXTRA_SETS+=("--generator-set" 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"default-queue"}')
-    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["ip-100-64-148-63.ec2.internal","ip-100-64-173-248.ec2.internal"]}]}]}}}')
+    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["ip-100-64-148-63.ec2.internal","ip-100-64-173-248.ec2.internal"]}]}]}}}}')
     ;;
   b200)
     CTX=nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster
@@ -91,7 +91,7 @@ case "$CLUSTER" in
     ORCH=()   # nscale 的 LWS 正常,默认编排即可
     EXTRA_SETS+=("--generator-set" 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}')
     # xmhbj/7wrxm 为已知脏 GPU 节点
-    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["cluster-0967a26d-pool-14bee067-prctr-xmhbj","cluster-0967a26d-pool-14bee067-prctr-7wrxm"]}]}]}}}')
+    EXTRA_SETS+=("--generator-set" 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["cluster-0967a26d-pool-14bee067-prctr-xmhbj","cluster-0967a26d-pool-14bee067-prctr-7wrxm"]}]}]}}}}')
     ;;
   *) echo "未知集群: $CLUSTER" >&2; exit 2 ;;
 esac
@@ -120,7 +120,7 @@ CMD=("$PYTHON" collector/collect.py
   --model-cache "$CACHE"
   --image-pull-secret nvcr-push-secret
   --generator-set "K8sConfig.k8s_image=$IMAGE"
-  "${EXTRA_SETS[@]}" "${ORCH[@]}" "${MODE_FLAGS[@]}" --limit "$LIMIT")
+  ${EXTRA_SETS[@]+"${EXTRA_SETS[@]}"} ${ORCH[@]+"${ORCH[@]}"} ${MODE_FLAGS[@]+"${MODE_FLAGS[@]}"} --limit "$LIMIT")
 (( GPUS == 16 )) && CMD+=(--fpm-dp-sizes 1)   # 16 卡钉死 TEP16/DP1
 
 echo "== cluster=$CLUSTER | gpus=$GPUS | model=$MODEL_KEY | ${MODE_FLAGS[*]:-formal} =="
