@@ -131,6 +131,21 @@ grep '"status"' .collector_checkpoint/fpm_forward_smoke.json
 | Engine logs on failure | `fpm_forward_artifacts/<run>/smoke/cells/<cell>/raw/<pod>/engine.std{out,err}.log` |
 | Rendered manifests / launch script | same dir: `k8s_deploy.yaml`, `run.sh` |
 | Collection summary (error taxonomy) | `all_<timestamp>/collection_summary_vllm.json` |
+| **Formal parquet** (only with `--formal`) | `fpm_formal_database/<system>/vllm/<version>/fpm_forward_perf.parquet` + `.metadata.json` |
+
+Verify a formal run's output (schema v6):
+
+```bash
+python3 - <<'EOF'
+import pandas as pd
+df = pd.read_parquet("fpm_formal_database/h200_sxm/vllm/0.25.1/fpm_forward_perf.parquet")
+print(len(df), "rows")
+print(df[["moe_backend", "attention_backend", "enable_wideep", "enable_eplb"]].drop_duplicates())
+EOF
+```
+
+Expect: string "auto" for unpinned backends, real booleans `False` for
+wide-EP/EPLB, positive `latency_ms` across the grid.
 
 ### Step 7: verify cleanup (hard rule: zero residue)
 
@@ -212,7 +227,27 @@ Concrete recipes:
 --fpm-parallel-presets tp --fpm-tp-sizes 8 --fpm-max-gpus 8
 ```
 
-### 3.5 Smoke vs formal, cell count
+### 3.5 Backend identity knobs (schema v6)
+
+Four columns identify which engine backends a row was measured under.
+Defaults: the string backends record `"auto"` (engine decides); the two
+booleans default to `false`. Pinning a value makes the collector deliver it
+to the engine and demand resolved-config evidence — combinations without
+verified plumbing are rejected up front:
+
+| Knob | Values | Plumbing (vllm) |
+|---|---|---|
+| `--fpm-moe-backend` | auto / kernel name | `--kernel-config {"moe_backend": ...}` + marker |
+| `--fpm-attention-backend` | auto only for now | rejected if pinned (no verified plumbing yet) |
+| `--fpm-enable-wideep` | false only on vllm | wide-EP is SGLang-only; `true` is rejected |
+| `--fpm-enable-eplb` | true / false | `--enable-eplb` + marker when `true` |
+
+Pass them through the driver by editing the `CMD` array, or invoke
+`collector/collect.py` directly. Note: pinned values need working
+resolved-config dumps in the image (see the image-vintage caveat in the
+troubleshooting table).
+
+### 3.6 Smoke vs formal, cell count
 
 - `--formal` in the driver removes `--smoke` → full sampling grid + database/parquet writes.
 - `--limit N` caps how many cells the plan executes (default 1).
@@ -229,6 +264,8 @@ Concrete recipes:
 | Engine crashes minutes in with `!cubin.empty()` assert | the old CUDA-PATH bug | make sure you are on this branch (it carries the fix) |
 | Pods vanish / exit code 137 | bypassed the KAI queue and got reclaimed | use this script (labels included); don't strip scheduling params |
 | `unrecognized arguments: --prefill-...` | image's dynamo build lacks the FPM CLI | keep the image tags pinned in the script (they are validated) |
+| `no <family>/vllm/<ver> directory with measured data exists` | formal publish refuses to invent curated trees | the driver passes `--fpm-database-root` automatically; keep it |
+| pinned backend value rejected at evidence check | the image's resolved-config dump is broken (holdout-signature vintage bug) | collect with auto, or fix the image's config dump first |
 
 ---
 
