@@ -1,0 +1,118 @@
+# FPM 混合步公式改造说明书(交接给 modeling PR)
+
+日期:2026-08-12 | 依据:fpm-all-20260811 战役全部实测证据(见文末附录)
+目标 PR:#1461(fpm-modeling-rust)跟进 | 涉及:aic-core Python + Rust,不碰 collector/数据契约
+
+## 0. 一句话
+
+混合步的 prefill 分量改为**按"本步实际调度的总 token 数(chunk + Bd)"查 FPM 曲线**,
+废除现行"整条 ISL 的行摊到每个 chunk"的定价 —— regime(CUDA graph 悬崖)由数据自带,
+公式只需把查询坐标放对。
+
+## 1. 现状(实测确认的行为)
+
+位置:`aic-core/src/aiconfigurator_core/sdk/backends/base_backend.py`
+`_get_fpm_mix_step_latency(model, database, runtime_config, ctx_tokens, gen_tokens, isl, osl, prefix)`
+(~L1283 起;Rust 侧无对应,混合步走 Python 组合)。
+
+现行组合:
+
+```
+prefill 分量 = run_static(batch=ceil(ctx/isl), isl=isl, osl=1, prefix, mode="static_ctx")
+               / chunk_scale,  chunk_scale = ceil(isl / ctx_tokens)
+decode 分量  = decode(B=gen_tokens, KV=avg) − query_pass_baseline(gen_tokens)   # 边际
+mixed        = prefill 分量 + max(0, decode 分量)
+```
+
+两个实测缺陷:
+
+1. **regime 盲区(主缺陷)**:真实引擎按"本步调度总 token = ctx + gen"决定 graph/eager。
+   现行查询坐标是 ISL 行的坐标,与本步总量无关。配置对齐(capture-2048)后的实测网格:
+   chunk=2048 行(2048+Bd 恰好跨界)误差 **-38%~-44%**(真实 76-88ms vs 模型 48-59ms)。
+2. **摊薄失真**:同一请求的各 chunk 成本不同(past-KV 逐 chunk 增长),ISL 行 / chunk 数
+   的平均值抹掉了这个结构;且 FPM 数据本身按 (batch, total_new_tokens, past_kv) 索引,
+   完全有能力精确定价单个 chunk。
+
+## 2. 新设计
+
+### 2.1 新查询接口(Python + Rust 镜像)
+
+```python
+# aic-core/src/aiconfigurator_core/sdk/operations/fpm_forward.py
+class FPMForwardOp:
+    def query_totals(self, database, *, batch_size: int,
+                     total_prefill_tokens: int,
+                     total_kv_read_tokens: int) -> PerformanceResult:
+        """按原始总量坐标查询(绕过 per-request (b, s, prefix) 的整除约束)。
+        内部直通现有 _resolve(cell, coords) 路径;prefill 相位 coords =
+        (batch_size, total_prefill_tokens, total_kv_read_tokens)。"""
+```
+
+必要性:chunk + Bd 一般不能被 batch 整除,现有 `query(b, s, prefix)` 表达不了。
+Rust 侧在 `aic-core/rust/aiconfigurator-core/src/operators/fpm_forward.rs` 加同名入口,
+engine runtime 的混合步路径同步(两引擎必须同一轮改完,由 parity 测试锁住)。
+
+### 2.2 混合步组合(替换 _get_fpm_mix_step_latency 的 prefill 分量)
+
+```python
+step_total = ctx_tokens + gen_tokens          # ← regime 与 GEMM 宽度的真实决定量
+pre = prefill_op.query_totals(
+        database,
+        batch_size=1,                         # 常态:一个 chunk 属于一个请求
+        total_prefill_tokens=step_total,      # ← 关键:含 gen_tokens
+        total_kv_read_tokens=chunk_past_kv)   # 该 chunk 的已算上下文(见 2.3)
+mixed = pre + max(0, dec_marginal)            # decode 边际项不变
+```
+
+**无重复计费论证**(已用 v2 实测网格离线验证):
+`query_totals(1, ctx+gen, kv)` 含 ctx+gen 个 token 的 GEMM/权重/固定开销;
+`dec_marginal = decode(B,KV) − baseline(B)` 经 baseline 减法只剩 **KV-attention 边际**
+(权重读、GEMM(B)、每步固定开销都在 baseline 里被减掉)。gen token 的 GEMM 恰好只在
+pre 里计一次。残余的高估仅为"gen 个 token 在 chunk 上下文内的自注意力",量级可忽略。
+
+### 2.3 多 chunk 请求(ctx_tokens < isl 的连续步)
+
+逐 chunk 精确求和,替代平均:
+
+```
+for k in chunks(isl, chunk_size):             # past_kv_k = prefix + Σ_{<k} chunk
+    cost_k = query_totals(1, chunk_k + gen_tokens_k, past_kv_k)
+TTFT 聚合 = Σ cost_k(调用方聚合接口保持不变)
+```
+
+### 2.4 边界情形
+
+- `ctx_tokens == 0`:纯 decode 整步,维持现行(full decode query);
+- `gen_tokens == 0`:纯 prefill chunk → `query_totals(1, ctx_tokens, prefix)`(同样废除摊薄);
+- 域外:沿用 FPM 铁律,`query_totals` 域外照常抛 PerfDataNotAvailableError,不外推。
+
+### 2.5 前提声明(写进 docstring 与用户文档)
+
+本公式的正确性依赖 FPM 契约前提:**部署引擎配置(尤其 cudagraph 捕获面)与采集一致**。
+悬崖位置不进模型,由数据的悬崖对(如 2048/2049)编码;配置错配时误差不可由公式挽救
+(实测:错配部署 chunk=512 行 -75%)。
+
+## 3. 测试与验收
+
+单元测试(Python + Rust parity):
+1. 跨界:chunk=2048, gen ∈ {1..64} 必须落 eager 侧(断言 > 图侧值;用悬崖对 fixture);
+2. 图内:chunk+gen ≤ 捕获界 → 图侧值;
+3. 无重复计费:synthetic fixture 上 |mixed(ctx,gen) − pure(ctx+gen) − dec_marginal| ≤ tol;
+4. 多 chunk 求和 == 各 chunk 独立查询之和;
+5. gen=0 / ctx=0 退化路径。
+
+回归验收(harness 已存在,可直接复放):
+- 数据:`fpm_e2e_20260811/mixed_validation_v2_cap2048.csv`(30 窗真实逐步网格)
+  + `serve_results/stream_stack1_v3.jsonl`(原始步流);
+- 门限:**跨界行(chunk=2048)从 -38~-44% 收到 ±15% 以内(旧数据)**;
+  配合重采后的新 parquet(随机 token 版)全网格 median|δ| ≤ 8%。
+- 已做过的离线预演:v2 网格上仅改坐标即达 |δ| median 13.7%,叠加数据修复后 5.4%。
+
+## 4. 证据附录(全部可复算)
+
+- 跨界实测:`mixed_validation_stack1.csv`(v1, -75%)/ `mixed_validation_v2_cap2048.csv`(v2, -44% 行);
+- 悬崖对:parquet tp8/b1/kv0:2048→47.24ms, 2049→99.48ms;
+- 摊薄定价现状:base_backend.py `run_static(... ) / chunk_scale`(~L1318-1345);
+- 配料修复(另行进行,与本改造独立):dynamo 全零输入随机化已实测使 prefill 全域
+  (128-8192)对齐真实流量 ≤±1.5%(probe_rand*.json vs 真实流);
+- 战役总账:`fpm_e2e_20260811/LEDGER.md` / `REPORT.md`。

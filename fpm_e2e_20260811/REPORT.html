@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FPM 端到端实验与精度验证 — 完整报告 (2026-08-11)</title>
+<style>
+  :root {
+    --ink: #1a1f2e; --muted: #5b6472; --line: #e3e7ee; --bg: #ffffff;
+    --panel: #f6f8fb; --accent: #2757d6; --good: #0c7a43; --bad: #b42318;
+    --warn: #b25e09; --chip: #eef2f9; --code: #f3f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e8ebf1; --muted: #9aa3b2; --line: #2a3040; --bg: #14161c;
+      --panel: #1c2029; --accent: #7ba3ff; --good: #4fc487; --bad: #ff8a7a;
+      --warn: #e5a558; --chip: #232936; --code: #1e232e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 28px 80px; }
+  h1 { font-size: 26px; line-height: 1.3; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-top: 20px; border-top: 2px solid var(--line); }
+  h3 { font-size: 16px; margin: 26px 0 8px; }
+  .sub { color: var(--muted); margin-bottom: 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
+  .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 20px;
+          padding: 3px 12px; font-size: 12.5px; color: var(--muted); }
+  .chip b { color: var(--ink); font-weight: 600; }
+  .verdict { background: var(--panel); border-left: 4px solid var(--accent); border-radius: 8px;
+             padding: 14px 18px; margin: 18px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12.5px;
+       text-transform: none; border-bottom: 2px solid var(--line); padding: 7px 10px; }
+  td { border-bottom: 1px solid var(--line); padding: 7px 10px; vertical-align: top; }
+  tr:hover td { background: var(--panel); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .neg { color: var(--bad); font-weight: 600; }
+  .pos { color: var(--warn); font-weight: 600; }
+  .ok  { color: var(--good); font-weight: 600; }
+  code, pre { font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .finding { border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 12px 0; }
+  .finding h4 { margin: 0 0 6px; font-size: 14.5px; }
+  .finding .tag { display: inline-block; font-size: 11px; border-radius: 4px; padding: 1px 8px;
+                  margin-right: 8px; font-weight: 700; letter-spacing: .3px; }
+  .tag.red { background: rgba(180,35,24,.12); color: var(--bad); }
+  .tag.amber { background: rgba(178,94,9,.12); color: var(--warn); }
+  .tag.green { background: rgba(12,122,67,.12); color: var(--good); }
+  .muted { color: var(--muted); }
+  .toc { background: var(--panel); border-radius: 10px; padding: 14px 20px; margin: 20px 0; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; }
+  .small { font-size: 12.5px; }
+  .grid-note { font-size: 12.5px; color: var(--muted); margin-top: -12px; }
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>FPM 端到端实验与精度验证 — 完整报告</h1>
+<div class="sub">采集 → 入库 → 预测 → 三类点位真值对账 · 2026-08-11</div>
+<div class="chips">
+  <span class="chip">分支 <b>fpm-all-20260811</b> @ f55ff21d</span>
+  <span class="chip">集群 <b>nebius-2 (H200)</b></span>
+  <span class="chip">模型 <b>MiniMax-M2.7</b> FP8-block MoE</span>
+  <span class="chip">工况 <b>ISL 8192 / OSL 1024</b></span>
+  <span class="chip">拓扑 <b>TEP4 / TEP8</b></span>
+  <span class="chip">镜像 <b>gc-steady-16xfix-20260809</b></span>
+</div>
+
+<div class="verdict"><b>一句话结论</b>:全链路打通;FPM <b>插值层</b>精度达标(median 1.3–2.5%,复现历史 2.33%);
+真实流量逐步对账暴露三个<b>数据层 / 契约层</b>问题 —— decode 路由熵乐观 5–9%、prefill 小步 ~6ms host 地板、
+mixed 配置契约断裂(-75%~+19%)—— 全部归因闭环并落账。</div>
+
+<div class="toc"><b>目录</b><ol>
+<li><a href="#env">环境与镜像准备</a></li>
+<li><a href="#flow">工作流程(步骤 → 命令 → 结果)</a></li>
+<li><a href="#verify">Verify 方法与结果</a></li>
+<li><a href="#artifacts">工件清单</a></li>
+<li><a href="#decisions">待决事项</a></li>
+</ol></div>
+
+<h2 id="env">一、环境与镜像准备</h2>
+
+<h3>1.1 集成分支(全部 collection + modeling PR)</h3>
+<pre><code>git fetch upstream main
+git checkout -b fpm-all-20260811 upstream/main          # 基线 648aebcc
+git merge --no-ff fpm-pr0-contract    # PR #1473 契约表          → 无冲突
+git merge --no-ff fpm-prg-generator   # PR #1474 generator 渲染面 → 无冲突
+git merge --no-ff fpm-prc-collector   # PR #1475 collector 工作流 → 无冲突
+git merge --no-ff fpm-modeling-rust   # PR #1461 modeling(#1384 超集)→ 无冲突
+# + 恢复 #1461 误删的 aic-codeowners skill;+ scripts/experiments/ 实验工具</code></pre>
+<p class="small muted">验证:#1384 触碰的所有文件逐一确认在合并结果中;已推 origin。</p>
+
+<h3>1.2 本地环境</h3>
+<pre><code>uv sync --extra dev</code></pre>
+<ul>
+<li>venv + maturin <b>从本分支源码现编</b> <code>_aiconfigurator_core.abi3.so</code>(含 <code>Op::FpmForward</code>);</li>
+<li>目标单测 <b class="ok">537 passed</b>,ruff 全绿;Rust/Python parity 套件 <b class="ok">335 passed</b>(含 FPM 整模段)。</li>
+</ul>
+
+<h3>1.3 镜像铁律</h3>
+<p>采集与全部真值测量同镜像:<code>nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-16xfix-20260809</code>(NGC 私有仓,<code>nvcr-push-secret</code> 拉取)。</p>
+
+<h3>1.4 集群前置</h3>
+<pre><code>tsh login --proxy=nv-prd-dgxc.teleport.sh:443     # 浏览器 SSO;登出后四集群 kube login 重建
+kubectl --context=$CTX get secret nvcr-push-secret -n yuanli-aic   # ✓
+kubectl --context=$CTX get pvc -n yuanli-aic                       # model-cache ✓</code></pre>
+
+<h2 id="flow">二、工作流程(步骤 → 命令 → 结果)</h2>
+
+<h3>Phase 1 — 正式采集(collector self-benchmark)</h3>
+<pre><code>export FPM_PYTHON=$PWD/.venv/bin/python
+scripts/experiments/fpm_collect.sh h100 4 m27            # 冒烟
+scripts/experiments/fpm_collect.sh h200 4 m27 --formal
+scripts/experiments/fpm_collect.sh h200 8 m27 --formal</code></pre>
+<table>
+<tr><th>运行</th><th>结果</th></tr>
+<tr><td>h100 4卡 smoke</td><td><span class="neg">失败</span> — 分到的卡启动时仅 4.99/79.18 GiB 空闲(邻居租户欠申报);已记录,零残留,h100 顺延</td></tr>
+<tr><td>h200 4卡 formal(47 min)</td><td><span class="ok">0 错误</span>,11,062 行,零残留</td></tr>
+<tr><td>h200 8卡 formal(29 min)</td><td><span class="ok">0 错误</span>,11,155 行,零残留</td></tr>
+</table>
+<p class="small">产物:<code>fpm_forward_perf.parquet</code> 22,217 行(schema v6,sha256 密封),4 cell = TEP4/TEP8 × prefill/decode。
+<b>关键事实</b>:prefill cell 与 decode cell 引擎参数不同(prefill:同步调度 + CUDA graph 捕获至 2048 + prefix caching ON;decode:async + 无 prefill 图 + prefix OFF)—— Phase 5 的关键线索。</p>
+
+<h3>Phase 2 — 入库与 FPM 预测</h3>
+<pre><code>cp fpm_formal_database/h200_sxm/vllm/0.25.1/fpm_forward_perf.{parquet,metadata.json} \
+   aic-core/src/aiconfigurator_core/systems/data/h200_sxm/vllm/0.25.1/
+
+.venv/bin/aiconfigurator cli default --model-path MiniMaxAI/MiniMax-M2.7 \
+  --system h200_sxm --backend vllm --backend-version 0.25.1 \
+  --total-gpus 8 --isl 8192 --osl 1024 --forward-model fpm</code></pre>
+<table>
+<tr><th>配置</th><th class="num">tokens/s/gpu</th><th class="num">tokens/s/user</th><th class="num">TTFT (ms)</th></tr>
+<tr><td>4 卡 agg TEP4</td><td class="num">336.99</td><td class="num">34.20</td><td class="num">448</td></tr>
+<tr><td>8 卡 2×TEP4(rank1)</td><td class="num">336.99</td><td class="num">34.20</td><td class="num">448</td></tr>
+<tr><td>8 卡 1×TEP8(rank2)</td><td class="num">308.27</td><td class="num">39.11</td><td class="num">394</td></tr>
+</table>
+<p class="small muted">disagg 正确拒答(需 TEP1/2 数据,FPM 不外推)。</p>
+
+<h3>Phase 3 — L0 闭环 + 双引擎对齐(纯本地)</h3>
+<ul>
+<li>全库可寻址格点逐一回读:<b class="ok">13,281 点位精确(0.000e+00)</b>;</li>
+<li>同一 sweep 分别以 <code>--engine-step-backend python|rust</code> 跑:<b class="ok">输出逐列一致</b>。</li>
+</ul>
+
+<h3>Phase 4 — 通道 B:显式点位探针(机制内验证)</h3>
+<p class="small">每拓扑 32 点(A 组格点锚:悬崖对 2048/2049、graph 对 8/9、8k/1k 工作区;B 组非格点:eager 稀疏段、KV 中点、离站 batch 12/52),程序化断言在格/不在格。镜像无 <code>--benchmark-points-file</code>,采用历史同款注入:</p>
+<pre><code>python3 -m dynamo.vllm ... \
+  --scheduler-cls dynamo.vllm.instrumented_scheduler.InstrumentedScheduler \
+  --worker-extension-cls dynamo.vllm.gc_policy.FpmGcWorkerExtension \
+  --additional-config '{"benchmark":{"mode":"agg","timeout":3600,"warmup_iterations":5,
+                        "output_path":"...","points":{...32 点内联...}}}'</code></pre>
+<p class="small">执行:复用采集渲染的 <code>k8s_deploy.yaml</code> 起 keepalive pod → pod 内起 etcd(collector 同款参数)→ <code>probe_exec.sh</code> 完成检测包装 → <b class="ok">5 重复 × 2 拓扑,全部 complete(32/32)</b>。调试沿革(均归档):flag 不存在 → 缺 etcd → prefix 点与 decode 配置冲突 → 引擎不自退。</p>
+
+<h3>Phase 5 — 通道 A:真实流量逐步真值(FPM 流 = 记录仪)</h3>
+<p class="small">同镜像 pod 内 etcd + nats + frontend + worker(采集 run.sh <b>仅删 benchmark 三 flag</b>),<code>DYN_FORWARDPASS_METRIC_PORT</code> 让 InstrumentedScheduler 被动发布每步指标(msgpack/ZMQ),监听器落 JSONL;流量由镜像内置 <code>vllm bench serve</code> 制造。<b>双栈对齐采集的双配置</b>:栈①(decode 参数)测 decode/mixed,栈②(prefill 参数)测 prefill。</p>
+<pre><code>vllm bench serve --backend openai --base-url http://127.0.0.1:8000 \
+  --model MiniMaxAI/MiniMax-M2.7 --tokenizer &lt;本地 snapshot&gt; \
+  --dataset-name random --random-input-len $ISL --random-output-len $OSL \
+  --random-range-ratio 0 --num-prompts $NP --max-concurrency $C --ignore-eos</code></pre>
+<table>
+<tr><th>扫描</th><th>窗口</th><th>覆盖</th></tr>
+<tr><td>decode(栈①)</td><td>34(27 有效)</td><td>B ∈ {1..512, 1024} × per-req KV ∈ {0.6k..200k}</td></tr>
+<tr><td>prefill(栈②)</td><td>110(101 有效)</td><td>b ∈ {1-4} × tokens 20 档(128..8192 含悬崖对)+ prefix {2k..262k}</td></tr>
+<tr><td>mixed(栈①,双流法)</td><td>30</td><td>chunk ∈ {256..6144} × Bd ∈ {8..64}</td></tr>
+<tr><td>判别实验</td><td>2</td><td>温度对照(--temperature 0)、C=40 跨 batch</td></tr>
+</table>
+
+<h2 id="verify">三、Verify 方法与结果</h2>
+
+<h3>方法矩阵</h3>
+<table>
+<tr><th>方法</th><th>验什么</th><th>结果</th></tr>
+<tr><td>L0a 闭环回读(全格点)</td><td>查表路径</td><td><span class="ok">0.000e+00 位精确</span></td></tr>
+<tr><td>L0b Rust vs Python(真实数据)</td><td>双引擎一致</td><td><span class="ok">逐列一致</span></td></tr>
+<tr><td>L1 噪声地板(5 重复极差)</td><td>“多准算准”标尺</td><td>TEP4 1.74% / TEP8 3.80%</td></tr>
+<tr><td>L2 插值留出(B 组 vs 模型)</td><td>FPM 核心主张</td><td><span class="ok">TEP4 2.51% / TEP8 1.31% median</span>(历史 2.33%)</td></tr>
+<tr><td>A 组格点重测</td><td>机制可复现性</td><td>大 KV 锚 ±0.3–1.8%;regime 边界点 +5~13% 不稳</td></tr>
+<tr><td>双仪器互证(客户端 ITL vs FPM 流)</td><td>记录仪共模误差</td><td><span class="ok">17.23 vs 17.12 ms(+0.6%)</span></td></tr>
+<tr><td>真实流量逐步对账</td><td>数据/组合层保真</td><td>见下三表</td></tr>
+<tr><td>判别实验(温度/KV 平坦/B 钟形)</td><td>偏差归因</td><td>路由熵三重证据</td></tr>
+</table>
+
+<h3>三类点位分布统计(窗级中位对账;delta = (模型−实测)/实测)</h3>
+<table>
+<tr><th>类</th><th class="num">n</th><th class="num">mean</th><th class="num">median</th><th class="num">p95 |δ|</th><th class="num">max |δ|</th><th>最大 gap 位置</th></tr>
+<tr><td><b>decode</b></td><td class="num">27</td><td class="num neg">-6.0%</td><td class="num neg">-5.3%</td><td class="num">10.3%</td><td class="num">11.1%</td><td>B=16, kv=8.7k/req(10.72 vs 9.53)</td></tr>
+<tr><td><b>prefill</b></td><td class="num">101</td><td class="num">-0.7%</td><td class="num">+1.2%</td><td class="num">29.9%</td><td class="num">32.8%</td><td>b=1, tokens=128(18.39 vs 12.36)</td></tr>
+<tr><td><b>mixed</b></td><td class="num">27</td><td class="num neg">-27.2%</td><td class="num neg">-35.3%</td><td class="num">72.4%</td><td class="num">75.0%</td><td>Bd=8, chunk=512(81.0 vs 20.2)</td></tr>
+</table>
+
+<h3>mixed 偏差网格(chunk × Bd)</h3>
+<table>
+<tr><th>chunk \ Bd</th><th class="num">8</th><th class="num">16</th><th class="num">32</th><th class="num">40</th><th class="num">64</th></tr>
+<tr><td>256</td><td class="num neg">-20.6</td><td class="num neg">-19.1</td><td class="num neg">-15.1</td><td class="num neg">-13.9</td><td class="num neg">-12.5</td></tr>
+<tr><td>512</td><td class="num neg">-75.0</td><td class="num neg">-73.2</td><td class="num neg">-70.5</td><td class="num neg">-69.1</td><td class="num muted">—</td></tr>
+<tr><td>1024</td><td class="num neg">-64.2</td><td class="num neg">-63.3</td><td class="num neg">-60.2</td><td class="num neg">-57.0</td><td class="num neg">-50.7</td></tr>
+<tr><td>2048</td><td class="num neg">-46.5</td><td class="num neg">-44.5</td><td class="num neg">-39.9</td><td class="num neg">-40.5</td><td class="num neg">-35.3</td></tr>
+<tr><td>4096</td><td class="num muted">—</td><td class="num pos">+12.5</td><td class="num pos">+15.5</td><td class="num pos">+16.2</td><td class="num pos">+18.5</td></tr>
+<tr><td>6144</td><td class="num muted">—</td><td class="num pos">+18.3</td><td class="num pos">+18.9</td><td class="num pos">+19.1</td><td class="num pos">+18.9</td></tr>
+</table>
+<p class="grid-note">负 = 模型低估(真实更慢);正 = 模型高估。-50~-75% 区正是“图捕获 vs eager 分歧区”。</p>
+
+<h3>结构性发现</h3>
+<div class="finding"><h4><span class="tag amber">DECODE</span>benchmark 数据系统性乐观 5–9%,归因 MoE 路由熵</h4>
+温度单变量实验:采样 17.12 → 贪心 16.37 ms(-4.4%);偏差沿 KV 平坦(B=8 从 0.6k 到 200k 恒 -3~-5%);
+沿 B 钟形(B=1:-0.9% → B=16-64:-7~-11% → B=512:-1.3%,两端因无塌缩空间/全 expert 覆盖归零)。
+偏差是<b>流量熵的函数</b>,记为 [-5%, -9%] 带;终审判别(dense 模型对照)未跑。</div>
+
+<div class="finding"><h4><span class="tag amber">PREFILL</span>小步 host 地板 + eager 段悲观,方向相反</h4>
+真实 serving 每步携带 ~6ms 固定 host 开销(128t:12.4→18.4ms),benchmark 行未含;
+eager 大步(2049–8192)benchmark 反而<b>悲观 13–16%</b>(与 6 月 golden launch-bound 发现同向);
+prefix 轴插值健康(±3–8%)。两相偏差对消 → 端到端 TPOT 仅差 -6.5%。</div>
+
+<div class="finding"><h4><span class="tag red">MIXED</span>配置契约断裂(最重要,需 owner 拍板)</h4>
+部署引擎(decode 配置)中 chunk 512–4096 撞 eager 地板(78–91ms),组合公式却拼入 prefill 配置
+(图捕获态 20–50ms)的行 → -50~-75%;chunk≥4096 两侧同为 eager,回到 +12~19% 加法高估。
+<b>采集两相与部署必须钉同一引擎配置</b> —— 公式调参无法修复数据身份错配。</div>
+
+<div class="finding"><h4><span class="tag green">插值层</span>FPM 核心主张成立</h4>
+非格点插值 median 1.3–2.5%(≈噪声地板),复现历史 509 点战役的 2.33%;域外硬拒答行为正确。</div>
+
+<h3>覆盖洞(均有明确修法)</h3>
+<ul class="small">
+<li>高并发 × 长 KV 7 窗(b1024、b40/64@64k–100k、b32@131k):OSL 太短,稳态池未成形;</li>
+<li>mixed Bd=8 尾部 2 格(长流排空);prefix &gt; 262k;h100/gb200/b200 未跑;dense 对照(qwen32b)未跑。</li>
+</ul>
+
+<h2 id="artifacts">四、工件清单</h2>
+<pre><code>fpm_e2e_20260811/
+├── LEDGER.md / REPORT.md / REPORT.html
+├── per_step_validation.csv          # 12,647 真实步逐步对账
+├── decode_validation_stack1.csv     # decode B×KV 窗级
+├── prefill_validation_stack2.csv    # prefill 全网格窗级
+├── mixed_validation_stack1.csv      # mixed chunk×Bd 窗级
+├── probes/tep{4,8}/probe_r{1..5}.json
+├── serve_results/                   # FPM 流快照 + 窗口清单
+└── *.py / probe_bundle_* / serve_bundle/   # 全部可复现执行包</code></pre>
+<p class="small muted">集群侧:4 个 pod 在位(2 探针 + 2 serving),等清理/补测决定;此外零残留。</p>
+
+<h2 id="decisions">五、待决事项(owner)</h2>
+<ol>
+<li><b>mixed 配置契约</b>:统一采集/部署引擎配置(collector + generator 联动,跨模块变更);</li>
+<li><b>decode 路由熵偏差</b>:dense 对照终审 → 采集侧真实化输入熵,或 modeling 侧按带宽表述;</li>
+<li><b>prefill 小步 host 地板</b>:归属代码路径、是否入模;</li>
+<li><b>4 pod</b> 清理 vs 留用补测;h100 及其余集群补跑。</li>
+</ol>
+
+<p class="small muted" style="margin-top:40px">Provenance:branch f55ff21d · parquet sha256 3c688b03… · image gc-steady-16xfix-20260809 · 全部数字可由工件复算。</p>
+</div></body>
+</html>
