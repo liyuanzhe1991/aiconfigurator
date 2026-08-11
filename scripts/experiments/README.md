@@ -52,11 +52,14 @@ tsh status | grep 'Valid until'
 Expect: browser SSO completes; validity ~7h.
 Warning: `tsh logout` (or expiry) wipes **all** kube contexts — rerun the `for` loop after every login.
 
-### Step 2: point the script at your Python env (once per terminal)
+### Step 2: Python env (once per terminal)
+
+All commands below run from the repo root and use `$PY`:
 
 ```bash
-export FPM_PYTHON=/path/to/venv/bin/python   # a venv with the collector dependencies
-PYTHONPATH=$PWD/src:$PWD/aic-core/src $FPM_PYTHON collector/collect.py --help | head -2
+PY=/path/to/venv/bin/python                    # a venv with the collector dependencies
+export PYTHONPATH=$PWD/src:$PWD/aic-core/src
+$PY collector/collect.py --help | head -2
 ```
 
 Expect: the usage text, with `fpm_forward` in the ops list. (The collector shells out
@@ -69,7 +72,7 @@ building (`cd aic-core/rust/aiconfigurator-core && maturin develop`) or by copyi
 from any existing build/wheel of the same revision. Verify with:
 
 ```bash
-PYTHONPATH=$PWD/src:$PWD/aic-core/src $FPM_PYTHON -c "import aiconfigurator.sdk.common; print('sdk OK')"
+$PY -c "import aiconfigurator.sdk.common; print('sdk OK')"
 ```
 
 ### Step 3: verify cluster prerequisites (once per cluster, ever)
@@ -87,36 +90,137 @@ If the model itself was never downloaded, run a one-off download Job
 
 ### Step 4: run
 
-Always preview first:
+There is no wrapper script: every command below is the complete, literal
+`collect.py` invocation (run from the repo root, after Step 2's `$PY` and
+`PYTHONPATH`). What you see is exactly what runs.
+
+#### What every flag does
+
+| Flag | What it does | When you change it |
+|---|---|---|
+| `FPM_KUBECTL="kubectl --context=..."` | env var: which cluster every kubectl call targets (contexts in Appendix A) | per cluster |
+| `--backend vllm` | inference backend being measured | never (this campaign) |
+| `--ops fpm_forward` | selects whole-model FPM collection (must be the only op) | never |
+| `--model-path` | HF model id — plan identity and the engine's `--model` | per model |
+| `--gpu` | AIC system profile (`h100_sxm`/`h200_sxm`/`gb200`/`b200_sxm`): nodeSelector, VRAM, GPUs-per-node facts | per cluster |
+| `--fpm-max-gpus N` | total GPUs in the plan | per scale |
+| `--fpm-parallel-presets` | parallel family: `tep`/`dep` (MoE), `tp` (dense) — see 3.4 | per model family |
+| `--fpm-tp-sizes N` | pins TP/EP width (= total GPUs → exactly one shape) | per scale |
+| `--fpm-dp-sizes 1` | **16 GPUs only**: pins TEP16/DP1 so the planner doesn't pick a mixed shape | 16-GPU runs |
+| `--namespace` | K8s namespace (quota + resources live here) | per environment |
+| `--model-cache PVC:MOUNT:SUBPATH` | model cache: PVC name / mount point in pod / snapshot dir. **SUBPATH must reach `models--ORG--NAME/snapshots/<rev>`** (the dir holding `config.json`) — the cache root is not a valid model dir. Look it up: see 3.2 | per model & cluster |
+| `--image-pull-secret nvcr-push-secret` | NGC private-registry pull credential | never |
+| `--generator-set K8sConfig.k8s_image=...` | engine container image — pinned per cluster, do not bump casually (Appendix B) | per cluster |
+| `--generator-set K8sConfig.fpm_resource_labels=...` | extra pod labels — KAI queue compliance (missing ⇒ pods reclaimed, exit 137) | KAI clusters |
+| `--generator-set K8sConfig.worker_extra_pod_spec=...` | pod-spec patch: `runAsUser:0` (FlashInfer cubin write access), `schedulerName: kai-scheduler`, bad-node blacklist affinity, GFD label overrides | per cluster |
+| `--fpm-orchestrator grove` | multinode orchestrator (Grove PodCliqueSet); omitted on B200 where LWS works | per cluster |
+| `--transport efa/ib/nvlink` | multinode interconnect | per cluster |
+| `--smoke --limit 1` | smoke tier: 1 cell, minimal axes, **no database writes**; `--limit` is smoke-only | smoke runs |
+| `--fpm-database-root DIR` | formal runs: where the parquet is published (publication refuses to invent curated in-repo trees, so this is required) | formal runs |
+
+Smoke vs formal: **always smoke first** for a new scenario. A formal command
+becomes its smoke variant by removing `--fpm-database-root ...` and appending
+`--smoke --limit 1`.
+
+#### h200 (nebius-2) · MiniMax-M2.7 · 8 GPUs · formal
 
 ```bash
-scripts/experiments/fpm_collect.sh h200 8 m27 --dry-run
+export FPM_KUBECTL="kubectl --context=nv-prd-dgxc.teleport.sh-dynamo-nebius-2"
+$PY collector/collect.py --backend vllm --ops fpm_forward \
+  --model-path MiniMaxAI/MiniMax-M2.7 --gpu h200_sxm \
+  --fpm-max-gpus 8 --fpm-parallel-presets tep --fpm-tp-sizes 8 \
+  --namespace yuanli-aic \
+  --model-cache model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
+  --image-pull-secret nvcr-push-secret \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-16xfix-20260809 \
+  --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}' \
+  --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0}}' \
+  --fpm-orchestrator grove --transport ib \
+  --fpm-database-root "$PWD/fpm_formal_database"
 ```
 
-Then run for real (drop `--dry-run`):
+16-GPU variant (2 nodes): change `--fpm-max-gpus 16 --fpm-tp-sizes 16` and append `--fpm-dp-sizes 1`.
+
+#### h100 (aws-dev-02) · MiniMax-M2.7 · 8 GPUs · formal
+
+aws-dev-02 has non-default GFD labels (hence the explicit nodeSelector) and no enforced KAI queue:
 
 ```bash
-scripts/experiments/fpm_collect.sh h200 8 m27
+export FPM_KUBECTL="kubectl --context=nv-prd-dgxc.teleport.sh-dynamo-aws-dev-02"
+$PY collector/collect.py --backend vllm --ops fpm_forward \
+  --model-path MiniMaxAI/MiniMax-M2.7 --gpu h100_sxm \
+  --fpm-max-gpus 8 --fpm-parallel-presets tep --fpm-tp-sizes 8 \
+  --namespace yuanli-aic \
+  --model-cache shared-model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
+  --image-pull-secret nvcr-push-secret \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-16xfix-20260809 \
+  --generator-set 'K8sConfig.worker_extra_pod_spec={"nodeSelector":{"nvidia.com/gpu.product":"NVIDIA-H100-80GB-HBM3"},"securityContext":{"runAsUser":0,"runAsGroup":0}}' \
+  --fpm-orchestrator grove --transport efa \
+  --fpm-database-root "$PWD/fpm_formal_database"
 ```
 
-Expect: a header line `== 集群 h200 | 8卡 | m27 | --smoke ==`, render logs, pods starting, engine boot; 20–40 min total (first multinode runs take longer).
+#### gb200 (aws-dev-01, ARM) · MiniMax-M2.7 · 16 GPUs (4 nodes) · formal
 
-All validated combinations, copy-paste ready:
+ARM image is mandatory; the affinity blacklist skips the 2026-08-10 IMEX-incident nodes (drop it once the cluster is fixed). For the manual NVLS/cumem workaround during fabric incidents see the end of this step.
 
 ```bash
-scripts/experiments/fpm_collect.sh h100  4  m27
-scripts/experiments/fpm_collect.sh h100  8  m27
-scripts/experiments/fpm_collect.sh h100  16 m27                      # 2 nodes
-scripts/experiments/fpm_collect.sh h200  4  m27
-scripts/experiments/fpm_collect.sh h200  8  m27
-scripts/experiments/fpm_collect.sh h200  16 m27                      # 2 nodes
-scripts/experiments/fpm_collect.sh gb200 8  m27 --imex-workaround    # ARM; 2 nodes
-scripts/experiments/fpm_collect.sh gb200 16 m27 --imex-workaround    # ARM; 4 nodes
-scripts/experiments/fpm_collect.sh b200  8  glm-nvfp4
-scripts/experiments/fpm_collect.sh b200  16 glm-nvfp4                # 2 nodes
+export FPM_KUBECTL="kubectl --context=nv-prd-dgxc.teleport.sh-dynamo-aws-dev-01"
+$PY collector/collect.py --backend vllm --ops fpm_forward \
+  --model-path MiniMaxAI/MiniMax-M2.7 --gpu gb200 \
+  --fpm-max-gpus 16 --fpm-parallel-presets tep --fpm-tp-sizes 16 --fpm-dp-sizes 1 \
+  --namespace yuanli-aic \
+  --model-cache model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
+  --image-pull-secret nvcr-push-secret \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-arm64-schedonly-20260810 \
+  --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"default-queue"}' \
+  --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["ip-100-64-148-63.ec2.internal","ip-100-64-173-248.ec2.internal","ip-100-64-174-195.ec2.internal","ip-100-64-226-152.ec2.internal"]}]}]}}}}' \
+  --fpm-orchestrator grove --transport nvlink \
+  --fpm-database-root "$PWD/fpm_formal_database"
 ```
 
-Smoke vs formal: the default is **smoke** (`--smoke --limit 1`: one cell, 4 benchmark points, no formal database writes). Add `--formal` for a **full collection** (full sampling grid, parquet output). Always smoke first.
+#### b200 (nscale) · GLM-5.2-NVFP4 · 8 GPUs · formal
+
+NVFP4 is sm100-only and the GB200 ARM image lacks FP4 kernels — GLM-5.2-NVFP4 runs on B200 only. The affinity blacklist skips the known dirty-GPU nodes (`xmhbj`, `7wrxm`). B200's LWS works, so no `--fpm-orchestrator`/`--transport`:
+
+```bash
+export FPM_KUBECTL="kubectl --context=nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster"
+$PY collector/collect.py --backend vllm --ops fpm_forward \
+  --model-path nvidia/GLM-5.2-NVFP4 --gpu b200_sxm \
+  --fpm-max-gpus 8 --fpm-parallel-presets tep --fpm-tp-sizes 8 \
+  --namespace yuanli-aic \
+  --model-cache shared-model-cache:/workspace/model_cache:models--nvidia--GLM-5.2-NVFP4/snapshots/aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa \
+  --image-pull-secret nvcr-push-secret \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:d719cca-gc-steady-20260729 \
+  --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}' \
+  --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["cluster-0967a26d-pool-14bee067-prctr-xmhbj","cluster-0967a26d-pool-14bee067-prctr-7wrxm"]}]}]}}}}' \
+  --fpm-database-root "$PWD/fpm_formal_database"
+```
+
+Dense-model variant (Qwen3-32B on b200, 4 GPUs): same command with
+`--model-path Qwen/Qwen3-32B`,
+`--model-cache shared-model-cache:/workspace/model_cache:models--Qwen--Qwen3-32B/snapshots/9216db5781bf21249d130ec9da846c4624c16137`,
+`--fpm-max-gpus 4 --fpm-parallel-presets tp --fpm-tp-sizes 4`.
+
+To run any of the above on a different model, swap the three model-bound
+values (`--model-path`, the `--model-cache` SUBPATH, the preset family) —
+lookup procedure in 3.2.
+
+Expect: render logs, pods starting, engine boot; 20–40 min total for smoke
+(first multinode runs take longer).
+
+#### GB200 IMEX incident workaround (manual, only during fabric faults)
+
+This edits a **tracked** facts file in place — restore it after the run and
+never commit it:
+
+```bash
+sed -i.bak -e 's/NCCL_NVLS_ENABLE: "1"/NCCL_NVLS_ENABLE: "0"/' \
+           -e 's/NCCL_CUMEM_ENABLE: "1"/NCCL_CUMEM_ENABLE: "0"/' \
+           -e 's/VLLM_USE_NCCL_SYMM_MEM: "1"/VLLM_USE_NCCL_SYMM_MEM: "0"/' \
+           src/aiconfigurator/generator/facts/hardware.yaml
+# ... run the gb200 command ...
+git checkout -- src/aiconfigurator/generator/facts/hardware.yaml && rm -f src/aiconfigurator/generator/facts/hardware.yaml.bak
+```
 
 ### Step 5: watch progress (optional, second terminal)
 
@@ -158,7 +262,13 @@ wide-EP/EPLB, positive `latency_ms` across the grid.
 
 ### Step 7: verify cleanup (hard rule: zero residue)
 
-A normal run prints `零残留 ✓` (zero residue) at the end. After an abnormal stop (Ctrl-C, network loss, timeout), clean up manually:
+Run this after **every** collection, normal or not:
+
+```bash
+kubectl --context=$CTX get pods -n yuanli-aic | grep fpm- || echo 'zero residue OK'
+```
+
+After an abnormal stop (Ctrl-C, network loss, timeout), clean up manually:
 
 ```bash
 kubectl --context=$CTX get pods,podcliquesets,computedomains -n yuanli-aic
@@ -166,21 +276,17 @@ kubectl --context=$CTX delete podcliqueset <name> -n yuanli-aic
 kubectl --context=$CTX delete computedomain <name> -n yuanli-aic     # GB200 only
 ```
 
-If you used `--imex-workaround`, restore the in-place-edited facts file:
-
-```bash
-git checkout -- src/aiconfigurator/generator/facts/hardware.yaml
-```
+If you applied the IMEX workaround, restore the facts file (see end of Step 4).
 
 ---
 
 ## Part 3 — How to change each dimension
 
-The driver script `fpm_collect.sh` takes `<cluster> <gpus> <model>` positionally. Here is exactly what each knob does and how to go beyond the presets.
+The Step 4 command blocks pin the campaign-validated values per dimension. Here is what each dimension means and how to go beyond the presets.
 
 ### 3.1 Cluster
 
-`h100 | h200 | gb200 | b200` selects a block in the script's **cluster registry** (the `case "$CLUSTER"` block) which sets, per cluster:
+Each cluster's command block in Step 4 differs in exactly these values:
 
 - kubectl context (`CTX`)
 - GPU profile passed to the collector (`--gpu h100_sxm / h200_sxm / gb200 / b200_sxm`)
@@ -189,17 +295,24 @@ The driver script `fpm_collect.sh` takes `<cluster> <gpus> <model>` positionally
 - container image (x86 clusters use the steady image; GB200 **must** use the ARM image `gc-steady-arm64-schedonly-20260810`)
 - KAI queue-compliance labels and known-bad-node blacklists
 
-**To add a cluster**: copy the closest `case` block, change context/PVC/image/transport, and keep the KAI labels if the cluster enforces queue scheduling (pods that bypass the queue get reclaimed with exit 137).
+**To add a cluster**: copy the closest Step 4 command block, change context/PVC/image/transport, and keep the KAI labels if the cluster enforces queue scheduling (pods that bypass the queue get reclaimed with exit 137).
 
 ### 3.2 Model
 
-`m27 | glm-nvfp4 | qwen32b` selects a block in the **model registry** (the `case "$MODEL_KEY"` block) which sets the HF path and the snapshot directory inside the model-cache PVC.
+A model contributes three values to a command: `--model-path` (HF id), the `--model-cache` SUBPATH (`models--ORG--NAME/snapshots/<rev>` inside the PVC), and the preset family (`tep`/`dep` for MoE, `tp` for dense).
+
+Look up the snapshot revision on the target cluster (it changes when the model is re-downloaded — never trust a stale copy):
+
+```bash
+kubectl --context=$CTX run pvc-peek --rm -i --restart=Never -n yuanli-aic --image=busybox:1.36 \
+  --overrides='{"spec":{"containers":[{"name":"pvc-peek","image":"busybox:1.36","command":["sh","-c","ls /cache/models--MiniMaxAI--MiniMax-M2.7/snapshots"],"volumeMounts":[{"name":"cache","mountPath":"/cache"}]}],"volumes":[{"name":"cache","persistentVolumeClaim":{"claimName":"model-cache"}}]}}'
+```
 
 **To add a model**:
 
 1. Download it to the target cluster's PVC (one-off Job, see Step 3).
-2. Add a `case` entry with `MODEL_PATH` (HF id) and `SNAPSHOT` (the `models--ORG--NAME/snapshots/<rev>` path inside the PVC).
-3. Mind hardware constraints — the script encodes one already: NVFP4 models are sm100-only, and the GB200 ARM image lacks FP4 kernels, so `glm-nvfp4` is restricted to B200.
+2. Look up its snapshot revision (command above) and substitute the three model-bound values into a Step 4 command.
+3. Mind hardware constraints — e.g. NVFP4 models are sm100-only, and the GB200 ARM image lacks FP4 kernels, so GLM-5.2-NVFP4 is restricted to B200.
 
 ### 3.3 GPU count
 
@@ -208,9 +321,9 @@ Node math: a run needs `N / gpus-per-node` **whole** nodes — 8 GPUs/node on h1
 
 ### 3.4 Parallelism mode (the part you edit by hand)
 
-The script pins the campaign-validated shape: **TEP** (`--fpm-parallel-presets tep --fpm-tp-sizes N`), and for 16 GPUs it additionally pins `--fpm-dp-sizes 1` so the planner selects TEP16/DP1 instead of a mixed shape.
+The Step 4 commands pin the campaign-validated shape: **TEP** (`--fpm-parallel-presets tep --fpm-tp-sizes N`), and for 16 GPUs additionally `--fpm-dp-sizes 1` so the planner selects TEP16/DP1 instead of a mixed shape.
 
-The collector exposes these knobs (pass them by editing the `CMD=(...)` array in the script, or by invoking `collector/collect.py` directly):
+The collector exposes these knobs (edit them directly in the command):
 
 | Knob | Values | Meaning | Constraints |
 |---|---|---|---|
@@ -222,7 +335,7 @@ The collector exposes these knobs (pass them by editing the `CMD=(...)` array in
 Concrete recipes:
 
 ```bash
-# TEP16, one DP replica (the validated 16-GPU shape) — what the script does:
+# TEP16, one DP replica (the validated 16-GPU shape) — what Step 4 uses:
 --fpm-parallel-presets tep --fpm-tp-sizes 16 --fpm-dp-sizes 1 --fpm-max-gpus 16
 
 # DEP16 (expert-parallel, DP-sharded across all 16 GPUs):
@@ -251,15 +364,14 @@ verified plumbing are rejected up front:
 | `--fpm-enable-wideep` | false only on vllm | wide-EP is SGLang-only; `true` is rejected |
 | `--fpm-enable-eplb` | true / false | `--enable-eplb` + marker when `true` |
 
-Pass them through the driver by editing the `CMD` array, or invoke
-`collector/collect.py` directly. Note: pinned values need working
+Append them to any Step 4 command. Note: pinned values need working
 resolved-config dumps in the image (see the image-vintage caveat in the
 troubleshooting table).
 
 ### 3.6 Smoke vs formal, cell count
 
-- `--formal` in the driver removes `--smoke` → full sampling grid + database/parquet writes.
-- `--limit N` caps how many cells the plan executes (default 1).
+- Formal = full sampling grid + parquet writes; its commands carry `--fpm-database-root` and no `--smoke`.
+- `--smoke --limit 1` = one cell, minimal axes, no database writes; `--limit` is smoke-only (formal must run its full plan).
 
 ---
 
@@ -429,11 +541,11 @@ it, attribute it to routing entropy explicitly in the ledger, and do not
 |---|---|---|
 | `timed out waiting for N FPM pods` | no capacity (16-GPU needs 2–4 whole idle nodes) | pure queueing — retry in ~30 min |
 | Pods stuck `Pending` | same (gang scheduling can't assemble whole nodes) | same |
-| `NCCL error: unhandled cuda error` (GB200) | cluster NVLink/IMEX fabric fault | use `--imex-workaround`; if it persists you drew a bad node — retry |
+| `NCCL error: unhandled cuda error` (GB200) | cluster NVLink/IMEX fabric fault | apply the manual IMEX workaround (end of Step 4); if it persists you drew a bad node — retry |
 | Engine crashes minutes in with `!cubin.empty()` assert | the old CUDA-PATH bug | make sure you are on this branch (it carries the fix) |
-| Pods vanish / exit code 137 | bypassed the KAI queue and got reclaimed | use this script (labels included); don't strip scheduling params |
-| `unrecognized arguments: --prefill-...` | image's dynamo build lacks the FPM CLI | keep the image tags pinned in the script (they are validated) |
-| `no <family>/vllm/<ver> directory with measured data exists` | formal publish refuses to invent curated trees | the driver passes `--fpm-database-root` automatically; keep it |
+| Pods vanish / exit code 137 | bypassed the KAI queue and got reclaimed | use the Step 4 commands verbatim (KAI labels included); don't strip scheduling params |
+| `unrecognized arguments: --prefill-...` | image's dynamo build lacks the FPM CLI | keep the image tags pinned in Appendix B (they are validated) |
+| `no <family>/vllm/<ver> directory with measured data exists` | formal publish refuses to invent curated trees | keep `--fpm-database-root` in every formal command |
 | pinned backend value rejected at evidence check | the image's resolved-config dump is broken (holdout-signature vintage bug) | collect with auto, or fix the image's config dump first |
 
 ---
@@ -447,13 +559,13 @@ it, attribute it to routing entropy explicitly in the ledger, and do not
 | gb200 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-01` | **ARM** | model-cache | 4 (4 GPUs/node) |
 | b200 | `nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster` | x86 | shared-model-cache | 2 |
 
-| Model key | Actual model | Notes |
+| Model | Preset family | Notes |
 |---|---|---|
-| m27 | MiniMaxAI/MiniMax-M2.7 (FP8 MoE, 222 GB) | main multinode workhorse |
-| glm-nvfp4 | nvidia/GLM-5.2-NVFP4 | sm100-only → B200 |
-| qwen32b | Qwen/Qwen3-32B (dense) | download to the target cluster first |
+| MiniMaxAI/MiniMax-M2.7 (FP8 MoE, 222 GB) | tep | main multinode workhorse |
+| nvidia/GLM-5.2-NVFP4 | tep | sm100-only → B200 |
+| Qwen/Qwen3-32B (dense) | tp | download to the target cluster first |
 
-Built into the script so you don't have to think about it: per-cluster image selection, KAI queue-compliance labels, known-bad-node blacklists, TEP16/DP1 pinning at 16 GPUs, and post-run residue verification.
+Already baked into the Step 4 command blocks: per-cluster image selection, KAI queue-compliance labels, known-bad-node blacklists, and TEP16/DP1 pinning at 16 GPUs. Residue verification is Step 7.
 
 ---
 
@@ -462,7 +574,7 @@ Built into the script so you don't have to think about it: per-cluster image sel
 All images live in the NGC private registry
 `nvcr.io/0980761089281446/dynamo-fpm-frozen` (**NGC, not Docker Hub** — pods
 need the `nvcr-push-secret` image-pull secret). They are crane-appended
-variants of the frozen dynamo build; the driver pins them per cluster:
+variants of the frozen dynamo build; the Step 4 commands pin them per cluster:
 
 | Cluster | Image tag | Why this one |
 |---|---|---|
