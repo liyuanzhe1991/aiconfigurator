@@ -263,6 +263,166 @@ troubleshooting table).
 
 ---
 
+## Part 4 — End-to-end: from collected parquet to FPM modeling
+
+Collection (Parts 2–3) produces the data; this part closes the loop by running
+`forward_model="fpm"` predictions against it. Everything here is CPU-only —
+no cluster needed.
+
+### 4.1 One-time environment (this worktree)
+
+```bash
+uv sync --extra dev
+```
+
+This creates `.venv` AND compiles the native Rust extension
+(`aic-core/src/aiconfigurator_core/_aiconfigurator_core.abi3.so`) from **this
+branch's** Rust source via maturin. That matters: #1461 adds `Op::FpmForward`
+to the Rust engine (the default engine since #1454); an `.so` from any older
+source imports fine but fails at plan time. The rustup toolchain lives at
+`/opt/homebrew/opt/rustup/bin` (not on the default PATH). Sanity check —
+the parity suite has a dedicated `forward_model="fpm"` section:
+
+```bash
+.venv/bin/python -m pytest aic-core/rust/aiconfigurator-core/parity_tests/test_engine_step_parity.py -q
+```
+
+### 4.2 Stage the collected pair into the systems tree
+
+The modeling loader resolves exactly one path per (system, backend, version):
+
+```
+<systems_root>/data/<system>/<backend>/<version>/fpm_forward_perf.parquet   (+ .metadata.json)
+```
+
+With the editable install, the systems root is the in-repo tree, so staging is
+one copy (example: an h200 formal run on vllm 0.25.1):
+
+```bash
+mkdir -p aic-core/src/aiconfigurator_core/systems/data/h200_sxm/vllm/0.25.1
+cp fpm_formal_database/h200_sxm/vllm/0.25.1/fpm_forward_perf.parquet \
+   fpm_formal_database/h200_sxm/vllm/0.25.1/fpm_forward_perf.metadata.json \
+   aic-core/src/aiconfigurator_core/systems/data/h200_sxm/vllm/0.25.1/
+```
+
+Rules the loader enforces (all fail loudly, by design):
+
+- **Copy the pair, never one file** — the sidecar carries the parquet's sha256;
+  an unmatched pair is rejected.
+- **Never edit the parquet** — any byte change breaks the digest gate.
+- **Never relocate across systems** — the sidecar pins system/backend/version;
+  an h200 pair copied into a b200 tree is rejected.
+- Do **not** commit staged pairs; they are experiment state, not curated data.
+
+### 4.3 Run FPM modeling
+
+```bash
+.venv/bin/aiconfigurator cli default \
+  --model-path MiniMaxAI/MiniMax-M2.7 \
+  --system h200_sxm --backend vllm --backend-version 0.25.1 \
+  --total-gpus 16 \
+  --forward-model fpm
+```
+
+`--forward-model fpm` is accepted by `default`, `exp`, `generate`, and
+`estimate` (not `afd`). Three exact-match rules decide whether a query is
+answerable:
+
+1. **`--model-path` must equal the collected `model_path` exactly** — cell
+   selection is exact-string (decision D1); no family/architecture borrowing.
+2. **Backend identity must match** the v6 identity columns the run was
+   collected under (`moe_backend`/`attention_backend` strings, wide-EP/EPLB
+   booleans; unpinned collections record `"auto"`/`false`).
+3. **No extrapolation, ever**: points outside the collected
+   (batch, prefill-tokens, kv-read-tokens) hull are *unanswerable* — sweeps
+   skip them rather than guessing. If the search comes back empty, your grid
+   doesn't cover the workload; collect more, don't loosen the query.
+
+---
+
+## Part 5 — Accuracy validation methodology
+
+Method distilled from previous silicon-alignment campaigns: climb a ladder of
+comparisons, each rung isolating one error source, and **never attribute a
+residual across more than one rung**. Keep a running ledger
+(`prediction | measured | delta | attribution`) per campaign; record retracted
+claims with the reason.
+
+### Level 0 — Closure (CPU-only, run first, costs nothing)
+
+Predict at exactly the collected grid points; FPM must reproduce its own
+input rows (error ≈ 0, exact-lookup path). This validates loader identity,
+cell matching, and phase bookkeeping — plumbing, not physics. Also run the
+Rust/Python parity suite against the *real* staged parquet (not just the
+synthetic fixture): both engines must agree before either is compared to
+silicon.
+
+### Level 1 — Noise floor (same silicon, re-measure)
+
+Re-collect a small probe subset twice on the same cluster (different pods,
+non-blacklisted nodes; medians of ≥3 benchmark repeats with the first run
+discarded — JIT/autotune warm-up skews percentiles, and the vLLM autotune
+cache is warm across pods, so a retry is not an independent sample).
+Define the noise floor δ = median |run-to-run delta|. **A prediction error
+below δ is unfalsifiable** — acceptance gates below are clamped to ≥ 2δ.
+
+### Level 2 — Interpolation holdout (the core FPM claim)
+
+FPM's promise is accurate *interpolation inside* the collected domain. Test
+exactly that:
+
+1. Run a formal collection (the full sampling grid) → the staged parquet.
+2. Collect a **probe set** of interior off-grid points — batch/prefill/kv
+   combinations strictly inside the hull but *not* on the lattice (drive
+   `collector/collect.py` directly with pinned shapes to hit them).
+3. Compare FPM predictions (from the formal parquet) against probe medians.
+
+Metrics per (system, GPUs, parallel shape, phase): median APE and p95 APE,
+prefill and decode reported separately. Gates from prior campaigns:
+**median ≤ 5%, p95 ≤ 10%**, clamped to ≥ 2δ. Investigate any point > 15%
+individually before touching the aggregate verdict.
+
+### Level 3 — Deployment-faithful end-to-end
+
+Compare the FPM-backed *serving* prediction (TTFT/TPOT/throughput at a target
+concurrency) against a real deployment measured with a load generator:
+
+- Deploy with the generator's own artifacts, on the same cluster, with the
+  **same pinned image the data was collected under** (Appendix B) — image
+  vintage changes kernels, and kernels are what FPM measured.
+- Match the measurement to what the model models: CUDA-graph capture sizes
+  must equal the deployment's; a standalone decode benchmark is polluted by
+  chunked-prefill mixing; EP/TP ranks run in lockstep so account per-step
+  across all ranks; discard first-run numbers.
+- Before blaming kernel speed, do the consistency arithmetic:
+  `throughput = concurrency × per-user speed`. Derive *effective* concurrency
+  from the measurement; a gap vs configured concurrency localizes the error
+  to admission/KV-memory, not forward-pass latency — that is a different rung.
+- Cross-check the memory side with the engine's own ledger lines (weights GiB,
+  KV tokens, max concurrency) against AIC's per-component memory dict —
+  component by component, never totals (component errors cancel in totals).
+
+### MoE-specific caveat (m27 is FP8 MoE)
+
+The collector benchmarks with synthetic inputs; near-identical hidden states
+collapse expert routing (few unique experts → several-fold less weight
+traffic), biasing measured forward latency **fast** relative to real text.
+Real weights (from the PVC snapshot) don't fix this — routing is
+data-dependent. So: treat Level-2 numbers as internally consistent
+(prediction and probe share the bias), but at Level 3 run the load generator
+with **realistic prompts** and expect a systematic gap on MoE models; measure
+it, attribute it to routing entropy explicitly in the ledger, and do not
+"fix" it by tuning unrelated knobs.
+
+### Campaign deliverables
+
+- The ledger (one row per comparison, with attribution).
+- Pinned provenance: branch SHA, image tags (Appendix B), parquet sha256s
+  (from the sidecars), cluster + node set, probe-point definitions.
+- The residuals deliberately left unexplained, stated as such.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Action |
@@ -294,3 +454,32 @@ troubleshooting table).
 | qwen32b | Qwen/Qwen3-32B (dense) | download to the target cluster first |
 
 Built into the script so you don't have to think about it: per-cluster image selection, KAI queue-compliance labels, known-bad-node blacklists, TEP16/DP1 pinning at 16 GPUs, and post-run residue verification.
+
+---
+
+## Appendix B — pinned container images
+
+All images live in the NGC private registry
+`nvcr.io/0980761089281446/dynamo-fpm-frozen` (**NGC, not Docker Hub** — pods
+need the `nvcr-push-secret` image-pull secret). They are crane-appended
+variants of the frozen dynamo build; the driver pins them per cluster:
+
+| Cluster | Image tag | Why this one |
+|---|---|---|
+| h100, h200 | `gc-steady-16xfix-20260809` | x86 steady build + the 16-GPU multinode fix |
+| gb200 | `gc-steady-arm64-schedonly-20260810` | ARM64 build; carries the dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200) |
+| b200 | `d719cca-gc-steady-20260729` | the original frozen baseline (dynamo `d719cca`) |
+
+Rules:
+
+- **Do not bump a tag casually.** Image vintage changes kernels and the
+  engine's CLI surface; the tags above are exactly what the collected data
+  and the troubleshooting table were validated against (e.g. older vintages
+  lack the FPM CLI args; one vintage ships a broken resolved-config dump that
+  breaks pinned-backend evidence checks).
+- **Level-3 accuracy validation must deploy the same tag the data was
+  collected under** (see Part 5) — comparing predictions from one kernel
+  vintage against measurements from another invalidates the comparison.
+- If a new image is unavoidable, re-run a smoke collection first and treat
+  every prior parquet as suspect until a Level-1 re-measure confirms the
+  kernels didn't move.
