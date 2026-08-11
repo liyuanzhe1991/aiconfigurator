@@ -327,7 +327,7 @@ The collector exposes these knobs (edit them directly in the command):
 
 | Knob | Values | Meaning | Constraints |
 |---|---|---|---|
-| `--fpm-parallel-presets` | `tep`, `dep` (MoE); `tp` (dense only) | which parallel family the planner enumerates | MoE models only accept tep/dep |
+| `--fpm-parallel-presets` | `tep`, `dep`, `pure_tp` (MoE); `tp` (dense) | which parallel families the planner enumerates — a space-separated **list** yields one plan covering all of them | `pure_tp` = tensor-parallel experts (`moe_tp` axis, experts sliced instead of distributed); it is capability-gated — models whose runtime capability does not declare it fail enumeration loudly. GLM-5.2 and MiniMax-M2.7 declare it |
 | `--fpm-tp-sizes` | e.g. `8`, `16` | tensor/expert-parallel width | **tep only** |
 | `--fpm-dp-sizes` | e.g. `1`, `2` | data-parallel replicas | with `dep`, this is the sharding axis; with tep×16 keep `1` |
 | `--fpm-max-gpus` | total GPUs | upper bound for the plan | must equal tp×dp for a single pinned shape |
@@ -347,7 +347,25 @@ Concrete recipes:
 
 # Dense model with plain TP (e.g. qwen32b):
 --fpm-parallel-presets tp --fpm-tp-sizes 8 --fpm-max-gpus 8
+
+# Multi-shape sweep in ONE run: presets take a list, and unpinned sizes
+# enumerate every width within the budget. Verified with --plan-only: this
+# plans 4 topologies / 8 cells (tep4, tep8, dep4, dep8), executed
+# sequentially under one plan sha / one checkpoint:
+--fpm-parallel-presets tep dep --fpm-max-gpus 8
+
+# pure_tp on a MoE model (capability-gated; verified on GLM-5.2: plans
+# tp4/moe_tp4 + tp8/moe_tp8):
+--fpm-parallel-presets pure_tp --fpm-max-gpus 8
 ```
+
+Notes on multi-shape runs: `--fpm-max-gpus` is an upper bound — without
+`--fpm-tp-sizes` the planner enumerates **all** valid widths under it (hence
+tep4 *and* tep8 above), and every shape costs 2 cells (prefill + decode).
+The campaign commands in Step 4 pin sizes precisely to avoid this fan-out;
+use multi-shape runs to fill a topology matrix on one cluster in one sitting.
+Repeated runs (any mix of shapes) merge into the same formal parquet —
+row-key uniqueness and run identity are checked at publication.
 
 ### 3.5 Backend identity knobs (schema v6)
 
