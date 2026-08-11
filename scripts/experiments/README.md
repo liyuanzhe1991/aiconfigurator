@@ -550,22 +550,37 @@ it, attribute it to routing entropy explicitly in the ledger, and do not
 
 ---
 
-## Appendix A — quick reference
+## Appendix A — cluster / image / model reference (single source)
 
-| Cluster | kubectl context | Arch | PVC | 16 GPUs = nodes |
-|---|---|---|---|---|
-| h100 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-02` | x86 | shared-model-cache | 2 |
-| h200 | `nv-prd-dgxc.teleport.sh-dynamo-nebius-2` | x86 | model-cache | 2 |
-| gb200 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-01` | **ARM** | model-cache | 4 (4 GPUs/node) |
-| b200 | `nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster` | x86 | shared-model-cache | 2 |
+**This table is the complete registry the retired `fpm_collect.sh` used to
+encode.** Every value below is baked into a Step 4 command block; if a
+command and this table ever disagree, one of them is stale — fix both in the
+same commit.
 
-| Model | Preset family | Notes |
-|---|---|---|
-| MiniMaxAI/MiniMax-M2.7 (FP8 MoE, 222 GB) | tep | main multinode workhorse |
-| nvidia/GLM-5.2-NVFP4 | tep | sm100-only → B200 |
-| Qwen/Qwen3-32B (dense) | tp | download to the target cluster first |
+### Per-cluster configuration
 
-Already baked into the Step 4 command blocks: per-cluster image selection, KAI queue-compliance labels, known-bad-node blacklists, and TEP16/DP1 pinning at 16 GPUs. Residue verification is Step 7.
+| Cluster | kubectl context | Arch | `--gpu` | PVC | Image tag (details: Appendix B) | Orchestrator / transport | KAI queue label | Known-bad nodes (affinity blacklist) | 16 GPUs = nodes |
+|---|---|---|---|---|---|---|---|---|---|
+| h100 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-02` | x86 | `h100_sxm` | `shared-model-cache` | `gc-steady-16xfix-20260809` | grove / efa | — (not enforced; needs explicit GFD nodeSelector `NVIDIA-H100-80GB-HBM3`) | — | 2 |
+| h200 | `nv-prd-dgxc.teleport.sh-dynamo-nebius-2` | x86 | `h200_sxm` | `model-cache` | `gc-steady-16xfix-20260809` | grove / ib | `dynamo` | — | 2 |
+| gb200 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-01` | **ARM** | `gb200` | `model-cache` | `gc-steady-arm64-schedonly-20260810` | grove / nvlink | `default-queue` | `ip-100-64-148-63/-173-248/-174-195/-226-152.ec2.internal` (2026-08-10 IMEX incident; drop when cluster fixed) | 4 (4 GPUs/node) |
+| b200 | `nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster` | x86 | `b200_sxm` | `shared-model-cache` | `d719cca-gc-steady-20260729` | LWS default / — | `dynamo` | `…-prctr-xmhbj`, `…-prctr-7wrxm` (dirty GPUs) | 2 |
+
+### Per-model values
+
+Snapshot revisions are **as observed 2026-08-11** — they change whenever the
+model is re-downloaded; always re-verify with the 3.2 lookup before a
+campaign.
+
+| Model (`--model-path`) | `--model-cache` SUBPATH (2026-08-11) | Preset | Notes |
+|---|---|---|---|
+| `MiniMaxAI/MiniMax-M2.7` (FP8 MoE, 222 GB) | `models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b` | tep | main multinode workhorse |
+| `nvidia/GLM-5.2-NVFP4` | `models--nvidia--GLM-5.2-NVFP4/snapshots/aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa` | tep | sm100-only → B200 (ARM image lacks FP4 kernels) |
+| `Qwen/Qwen3-32B` (dense) | `models--Qwen--Qwen3-32B/snapshots/9216db5781bf21249d130ec9da846c4624c16137` | tp | download to the target cluster first |
+
+Also baked into the Step 4 commands: `runAsUser:0` (FlashInfer cubin write
+access), `schedulerName: kai-scheduler` on KAI clusters, and TEP16/DP1
+pinning at 16 GPUs. Residue verification is Step 7.
 
 ---
 
