@@ -128,6 +128,9 @@ CMD=("$PYTHON" collector/collect.py
 # (the CLI rejects the combination), and the pinned preset/tp keeps the
 # formal plan to a single cell anyway.
 (( ${#MODE_FLAGS[@]} )) && CMD+=(--limit "$LIMIT")
+# Formal publication refuses to invent curated in-repo data trees; write
+# into an explicit experiment root instead (inspect/copy from there).
+(( ${#MODE_FLAGS[@]} )) || CMD+=(--fpm-database-root "$REPO_ROOT/fpm_formal_database")
 (( GPUS == 16 )) && CMD+=(--fpm-dp-sizes 1)   # 16 卡钉死 TEP16/DP1
 
 echo "== cluster=$CLUSTER | gpus=$GPUS | model=$MODEL_KEY | ${MODE_FLAGS[*]:-formal} =="
