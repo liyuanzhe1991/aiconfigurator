@@ -121,10 +121,11 @@ Expect: pods go `Pending` → `Running` (one leader + N-1 followers for multinod
 ### Step 6: read the result
 
 ```bash
-grep '"status"' .collector_checkpoint/fpm_forward_smoke.json
+grep '"status"' .collector_checkpoint/fpm_forward_smoke.json   # smoke runs
+grep '"status"' .collector_checkpoint/fpm_forward.json         # formal runs
 ```
 
-`"status": "passed"` = success.
+`"status": "passed"` = success. (Smoke and formal keep separate checkpoints.)
 
 | What | Where |
 |---|---|
