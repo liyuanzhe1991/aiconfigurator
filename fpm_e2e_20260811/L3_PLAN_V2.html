@@ -73,7 +73,7 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <tr><td>锚点 bp(A 组)</td><td>= 采集格里的全部 bs 值(逐行)</td></tr>
 <tr><td>外插 bp(C 组)</td><td>{1.5, 2, 3, 4, 6, 8, 12, 16} × B<sub>c</sub>,截断于 min(max_num_seqs, 预算/tok);<b>误差按 bp/B<sub>c</sub> 倍数分层</b></td></tr>
 <tr><td>tok 档</td><td>burst 总量落在 capture 边界(悬崖对导出)的 {0.5, 0.9, 1.1, 2, 4}× 处,截断于预算;对齐采集 token 格以复用锚点</td></tr>
-<tr><td>B 组(域内离网)</td><td>tok = 相邻采集档中点(bp ≤ B<sub>c</sub>);每对相邻档 ≥1 样本</td></tr>
+<tr><td>B 组(域内离网)</td><td>tok = 相邻采集档中点(bp ≤ B<sub>c</sub>);<b>graph 区与 eager 区各自有配额</b>(graph 格密 → 取分位处的档间中点,不设最小间隙过滤);prefix 离网中点(可行子格分位)同为 B 组</td></tr>
 <tr><td>prefix 子矩阵</td><td>bp ∈ {1.5B<sub>c</sub>, 2B<sub>c</sub>} × tok 中档 × prefix = prefix 格 1/4、3/4 分位;可行性 tok+prefix ≤ max_model_len − block</td></tr>
 </table>
 <div class="box rule">引擎配置与 prefill 采集 cell 严格同参(sync 调度 + 采集 capture 面 + prefix caching ON);burst 用随机 prompt 避免跨请求前缀命中。</div>
@@ -88,7 +88,7 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <tr><td>B 阶梯</td><td>采集批格分位数(A 组)+ 悬崖对邻域 B*、B*±邻近整数 + eager 段中点(B* 与最大采集批之间,B 组)</td></tr>
 <tr><td>KV 带</td><td>每请求 s = 该批曲线覆盖的 {1/6, 1/3, 1/2, 2/3, 5/6} 分位(A 组扫过命中 + 分位间自然产生 B 组步);上限尊重 max_model_len</td></tr>
 <tr><td>巨 KV 标记</td><td>KV 总量 ≥ 该 cell KV 域上四分位的窗 → <b>强制多启动(≥3)取中位</b>(档位抽签地板,LEDGER 七启动判别)</td></tr>
-<tr><td>off-capture 批次</td><td>真实流量本身在批次间迁移,逐步打分自然覆盖;不设专窗</td></tr>
+<tr><td>批轴 B 组专窗</td><td>离格批次 C(graph 区多点 + eager 区中点)短窗 — 专测批轴插值(段括住);<b>逐步分层</b>:A 窗 128 步仅 1 步命中采集 s,余步自动计入 KV 轴 B 组(免费 ~百倍样本)</td></tr>
 </table>
 
 <h2>5. mixed 矩阵(分量分层)</h2>
@@ -96,7 +96,7 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <table>
 <tr><th>层</th><th>构造</th><th>意义</th></tr>
 <tr><td><span class="tag tA">A</span></td><td><b>chunk = 采集token档 − Bd</b>(使 chunk+Bd 恰落采集行)且 Bd = 采集 decode 批值,kvd 由池算术命中</td><td><b>纯公式误差</b>——插值完全排除。验收门挂这里</td></tr>
-<tr><td><span class="tag tB">B</span></td><td>chunk = 档间中点等,任一分量走插值</td><td>公式+插值联合误差(参考)</td></tr>
+<tr><td><span class="tag tB">B</span></td><td>chunk = 档间中点等,任一分量走插值;<b>graph 区与 eager 区总量各有样本</b></td><td>公式+插值联合误差(参考)</td></tr>
 <tr><td><span class="tag tC">C</span></td><td>bp ∈ {2, B<sub>c</sub>, 1.5B<sub>c</sub>, 2B<sub>c</sub>} 条短 prompt 齐发 + 稳定 decode 池(bp×tok + Bd ≤ 预算)</td><td>bs 外插在组合公式里的表现;bp &gt; B<sub>c</sub> 时标 C,不混入 B 组统计</td></tr>
 </table>
 <h3>5.1 覆盖轴</h3>
