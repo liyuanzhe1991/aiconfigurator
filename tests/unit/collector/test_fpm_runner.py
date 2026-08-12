@@ -2119,3 +2119,95 @@ def test_user_extra_env_conflicting_with_collector_identity_fails_closed():
 
     with pytest.raises(ValueError, match="conflicting FPM environment value"):
         _cell_generator_overrides(plan, cell, base)
+
+
+def test_full_plan_with_failed_cells_publishes_passed_cells(monkeypatch, tmp_path):
+    """A capability-gated plan legitimately contains cells the engine refuses
+    (admission passes what it cannot prove impossible). Publication must ship
+    the passed cells and record the excluded ones — failure is data — instead
+    of holding every passed cell hostage (the 2026-08-12 multi-parallel run:
+    8 passed cells unpublishable behind 4 legitimately-failed ones)."""
+
+    first = _cell()
+    second = dataclasses.replace(first, cell_id="cell-prefill-doomed")
+    plan = _plan(first)
+    plan.cells = (first, second)
+
+    def render_cell(*args, **_kwargs):
+        cell_dir = args[2]
+        (cell_dir / "k8s_deploy.yaml").write_text("apiVersion: v1\nkind: Pod\nmetadata:\n  name: cell\n")
+        (cell_dir / "run.sh").write_text("#!/bin/sh\n")
+        (cell_dir / "fpm_env.sh").write_text("#!/bin/sh\n")
+
+    class FakeResource:
+        def __init__(self, _manifest, cell_dir):
+            self._doomed = "doomed" in str(cell_dir)
+
+        def apply(self):
+            pass
+
+        def wait_ready(self, _expected_nodes):
+            return ["pod-0"]
+
+        def stage(self, _pods, _files):
+            pass
+
+        def prepare_attempt(self, _pods, **_kwargs):
+            pass
+
+        def execute(self, _pods):
+            if self._doomed:
+                raise RuntimeError("engine refused this topology")
+
+        def collect(self, _pods, *, require_benchmark=True):
+            pass
+
+        def cleanup(self):
+            pass
+
+    published = {}
+
+    def fake_aggregate(_plan, cell, _cell_dir, expected_attempt_id):
+        return [{"cell_id": cell.cell_id, "attempt": expected_attempt_id}]
+
+    def fake_write(plan_arg, rows, *, systems_root=None, skip_already_published_cells=False, skipped_cells=None):
+        published["rows"] = rows
+        published["skip_flag"] = skip_already_published_cells
+        return (tmp_path / "db.parquet", tmp_path / "db.metadata.json")
+
+    monkeypatch.setattr(fpm_runner, "_render_cell", render_cell)
+    monkeypatch.setattr(fpm_runner, "KubernetesCellRunner", FakeResource)
+    monkeypatch.setattr(
+        fpm_runner,
+        "_runtime_collection_summary",
+        lambda *_args, **_kwargs: {"measured_point_count": 1},
+    )
+    import collector.fpm_forward.database as fpm_database
+
+    monkeypatch.setattr(fpm_database, "aggregate_cell", fake_aggregate)
+    monkeypatch.setattr(fpm_database, "write_formal_database", fake_write)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    errors = run_collection(
+        plan,
+        generator_overrides={},
+        checkpoint_dir=str(checkpoint_dir),
+        artifact_root=str(tmp_path / "artifacts"),
+        resume=False,
+        retry_failed=False,
+        smoke=False,
+    )
+
+    classifications = [error["classification"] for error in errors]
+    assert "campaign_cell_failed" in classifications
+    assert "formal_database_failed" not in classifications
+    assert "campaign_incomplete" not in classifications
+
+    checkpoint = json.loads((checkpoint_dir / "fpm_forward.json").read_text())
+    database = checkpoint["database"]
+    assert database["status"] == "passed"
+    assert database["published_cells"] == [first.cell_id]
+    assert [entry["cell_id"] for entry in database["excluded_cells"]] == [second.cell_id]
+    assert published["skip_flag"] is True
+    assert [row["cell_id"] for row in published["rows"]] == [first.cell_id]

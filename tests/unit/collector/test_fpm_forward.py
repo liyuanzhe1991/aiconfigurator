@@ -1651,3 +1651,58 @@ def test_unplumbed_backend_identity_fails_closed():
                 options=options,
                 generator_overrides={},
             )
+
+
+def test_formal_database_skip_already_published_cells_first_publisher_wins(tmp_path):
+    """Multi-plan campaigns re-collect overlapping cells (content-addressed
+    cell ids) under new run identities. With skip_already_published_cells the
+    second publication drops those cells (first publisher wins, nothing is
+    overwritten or mixed) instead of failing the whole publication; an
+    all-conflicting publication still refuses (nothing new to merge)."""
+
+    plan, cell, cell_dir = _synthetic_plan_and_cell(tmp_path)
+    rows = aggregate_cell(plan, cell, cell_dir, expected_attempt_id="attempt")
+    systems_root = tmp_path / "systems"
+    write_formal_database(plan, rows, systems_root=systems_root)
+
+    rerun_rows = [
+        {
+            **rows[0],
+            "total_prefill_tokens": rows[0]["total_prefill_tokens"] + 1,
+            "collector_attempt_id": "different-attempt",
+            "runtime_run_id": "different-run",
+        }
+    ]
+    skipped: list[str] = []
+    with pytest.raises(ValueError, match="nothing new to merge"):
+        write_formal_database(
+            plan,
+            rerun_rows,
+            systems_root=systems_root,
+            skip_already_published_cells=True,
+            skipped_cells=skipped,
+        )
+    assert skipped == [rows[0]["cell_id"]]
+
+    # A mixed publication keeps the fresh cell and skips the conflicted one.
+    fresh_cell_rows = [
+        {
+            **rows[0],
+            "cell_id": "fpm-fresh-cell",
+            "collector_attempt_id": "different-attempt",
+            "runtime_run_id": "different-run",
+        }
+    ]
+    skipped2: list[str] = []
+    parquet, _metadata = write_formal_database(
+        plan,
+        rerun_rows + fresh_cell_rows,
+        systems_root=systems_root,
+        skip_already_published_cells=True,
+        skipped_cells=skipped2,
+    )
+    assert skipped2 == [rows[0]["cell_id"]]
+    import pyarrow.parquet as pq_mod
+
+    cell_ids = set(pq_mod.read_table(parquet).column("cell_id").to_pylist())
+    assert "fpm-fresh-cell" in cell_ids

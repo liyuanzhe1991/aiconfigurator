@@ -1616,15 +1616,29 @@ def _run_collection_impl(
             "formal_database_written": False,
         }
         _atomic_json(checkpoint_path, checkpoint)
-    elif not errors and all_passed and covers_full_plan:
+    elif covers_full_plan and any(
+        checkpoint["cells"].get(cell.cell_id, {}).get("status") == "passed" for cell in target_cells
+    ):
         from .database import aggregate_cell, write_formal_database
 
         try:
+            # Failure is data, not a defect (collector doctrine): a capability-
+            # gated plan legitimately contains cells the engine refuses, and
+            # their absence from the database is the honest record. Publish the
+            # passed cells; record the excluded ones loudly.
             formal_rows = []
+            published_cells: list[str] = []
+            excluded_cells: list[dict] = []
             for cell in plan.cells:
                 entry = checkpoint["cells"].get(cell.cell_id)
                 if not isinstance(entry, dict) or entry.get("status") != "passed":
-                    raise ValueError(f"cannot publish non-passed FPM cell {cell.cell_id!r}")
+                    excluded_cells.append(
+                        {
+                            "cell_id": cell.cell_id,
+                            "status": entry.get("status") if isinstance(entry, dict) else None,
+                        }
+                    )
+                    continue
                 formal_rows.extend(
                     aggregate_cell(
                         plan,
@@ -1633,13 +1647,32 @@ def _run_collection_impl(
                         expected_attempt_id=_required_attempt_id(entry, cell.cell_id),
                     )
                 )
+                published_cells.append(cell.cell_id)
+            if excluded_cells:
+                logger.warning(
+                    "FPM formal publication excludes %d non-passed cell(s); their shapes stay "
+                    "out of the database (modeling answers out-of-domain by refusal): %s",
+                    len(excluded_cells),
+                    excluded_cells,
+                )
             systems_root = Path(database_root).expanduser().resolve() if database_root else None
-            parquet_path, metadata_path = write_formal_database(plan, formal_rows, systems_root=systems_root)
+            skipped_already_published: list[str] = []
+            parquet_path, metadata_path = write_formal_database(
+                plan,
+                formal_rows,
+                systems_root=systems_root,
+                skip_already_published_cells=True,
+                skipped_cells=skipped_already_published,
+            )
+            skipped_set = set(skipped_already_published)
             checkpoint["database"] = {
                 "status": "passed",
                 "parquet": str(parquet_path),
                 "metadata": str(metadata_path),
-                "row_count": len(formal_rows),
+                "row_count": sum(1 for row in formal_rows if row.get("cell_id") not in skipped_set),
+                "published_cells": [c for c in published_cells if c not in skipped_set],
+                "excluded_cells": excluded_cells,
+                "skipped_already_published": skipped_already_published,
             }
         except Exception as error:
             checkpoint["database"] = {

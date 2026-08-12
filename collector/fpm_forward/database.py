@@ -323,8 +323,17 @@ def write_formal_database(
     rows: list[dict[str, Any]],
     *,
     systems_root: Path | None = None,
+    skip_already_published_cells: bool = False,
+    skipped_cells: list[str] | None = None,
 ) -> tuple[Path, Path]:
-    """Atomically merge conflict-free native-grid rows into the AIC data tree."""
+    """Atomically merge conflict-free native-grid rows into the AIC data tree.
+
+    ``skip_already_published_cells`` makes multi-plan campaigns idempotent per
+    cell: an incoming cell whose cell_id already exists in the database under a
+    DIFFERENT run identity is dropped (first publisher wins, nothing is ever
+    overwritten or mixed) instead of failing the whole publication. Skipped
+    cell ids are appended to ``skipped_cells`` when provided.
+    """
 
     if not rows:
         raise ValueError("refusing to write an empty FPM database")
@@ -402,12 +411,32 @@ def write_formal_database(
                 f"expected={version!r}"
             )
         existing_identities = _run_identities_by_cell(merged, source="existing")
+        conflicted: list[str] = []
         for cell_id, incoming_identity in incoming_identities.items():
             existing_identity = existing_identities.get(cell_id)
             if existing_identity is not None and existing_identity != incoming_identity:
+                if skip_already_published_cells:
+                    conflicted.append(cell_id)
+                    continue
                 raise ValueError(
                     f"refusing to mix FPM run identities for cell_id={cell_id!r}: "
                     f"existing={existing_identity!r}, incoming={incoming_identity!r}"
+                )
+        if conflicted:
+            logging.getLogger(__name__).warning(
+                "FPM publication skips %d cell(s) already published under a different run "
+                "identity (first publisher wins, nothing overwritten): %s",
+                len(conflicted),
+                sorted(conflicted),
+            )
+            if skipped_cells is not None:
+                skipped_cells.extend(sorted(conflicted))
+            dropped = set(conflicted)
+            rows = [row for row in rows if row.get("cell_id") not in dropped]
+            if not rows:
+                raise ValueError(
+                    "every incoming FPM cell is already published under a different run "
+                    "identity; nothing new to merge"
                 )
         index = {tuple(row[key] for key in _ROW_KEY): row for row in merged}
         if len(index) != len(merged):
