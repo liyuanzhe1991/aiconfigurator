@@ -34,6 +34,7 @@ from __future__ import annotations
 import bisect
 import functools
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -58,6 +59,19 @@ FPM_FORWARD_PARTITION_POLICY = "balanced_v1"
 # The only measurement policy the collector publishes; pinned in the sidecar
 # gate so a pair measured under a different regime is a loud structural error.
 FPM_FORWARD_MEASUREMENT_POLICY = "dynamo_native_single_sample_v1"
+# Batch-clamp KV-pressure ceiling: the clamp answers with a measured row at
+# the batch ceiling, which prices the same totals split into FEWER, LONGER
+# segments — a strict upper bound whose looseness grows with KV pressure
+# (total_kv / total_prefill). Randtok LOO (fpm_e2e_20260811/batch_clamp_loo,
+# 16k points, tp4+tp8, clamp ratios 2x/4x): below pressure 2 the clamp is
+# median <= 2% / p90 <= 6.5% — served as-is (measured value, no SOL).
+# Above it the raw clamp loosens to median 14% / p90 96%, so the measured
+# ceiling row is rescaled by the whole-model SOL ratio between the true and
+# clamped shapes (LOO: median 4.5% / p90 13%) — the same mechanism the
+# cross-site transfer already uses — and ONLY when this model's SOL is
+# actually available: a model whose roofline is unported answers nothing
+# rather than something half-modeled.
+_PREFILL_CLAMP_MAX_KV_PRESSURE = 2.0
 _PHASES = ("prefill", "decode")
 
 
@@ -372,19 +386,28 @@ def load_fpm_forward_data(primary_path: str, expected_version: str, expected_sys
                     for axis in range(len(axes))
                 )
         cell["domains"] = domains
-        # Decode batch-axis regime partition: the ScatteredSites batch
-        # distance is regime-blind (a b=600 query would mix one eager vote
-        # with three graph votes), so split at the data-encoded capture
-        # boundary and let each side interpolate among its own kind. The
-        # domain gate stays on the FULL decode box (gate first, route after).
-        boundary = _detect_decode_regime_boundary(cell["tables"]["decode"])
-        cell["decode_regime_boundary"] = boundary
-        if boundary is not None:
-            decode_table = cell["tables"]["decode"]
-            # Two NEW dicts -> two new id(data) keys: the perf_interp site
-            # index cache can never serve one side's index for the other.
-            cell["tables"]["decode_graph"] = {b: c for b, c in decode_table.items() if b <= boundary}
-            cell["tables"]["decode_eager"] = {b: c for b, c in decode_table.items() if b > boundary}
+        # Prefill batch-axis clamp certificate: real steps can schedule more
+        # whole prefills than the collected batch ceiling (short sequences);
+        # at fixed totals the batch coordinate is provably near-flat for
+        # attention-light models, and the DATA must show it before the op
+        # may clamp. No certificate -> the hard domain gate stays.
+        prefill_batches = sorted(cell["tables"]["prefill"])
+        cell["prefill_batch_clamp_max"] = (
+            prefill_batches[-1] if prefill_batches and _prefill_batch_axis_is_flat(cell["tables"]["prefill"]) else None
+        )
+        # Decode batch-axis bracket metadata: the engine pads decode batches
+        # to capture rungs, so latency along the batch axis is a staircase —
+        # regime-blind k-NN would mix votes across rungs (the b=600
+        # pathology). The collector marks every rung with an (x, x+1) row
+        # pair; off-lattice queries interpolate between their segment's
+        # bracket rows at the op layer (_decode_bracket), and the per-row
+        # curve bounds cached here let the op guard coverage BEFORE
+        # sub-querying (an uncovered bracket row would otherwise silently
+        # fall back to the engine's k-NN).
+        decode_table = cell["tables"]["decode"]
+        cell["decode_batches"] = sorted(decode_table)
+        cell["decode_rungs"] = [b for b in cell["decode_batches"] if b + 1 in decode_table]
+        cell["decode_curve_bounds"] = {b: (min(curve), max(curve)) for b, curve in decode_table.items()}
 
     return {"cells": cells}
 
@@ -409,41 +432,41 @@ def _decode_curve_value(curve: dict, kv: float) -> float:
     return float(curve[k0]) + (float(curve[k1]) - float(curve[k0])) * w
 
 
-def _detect_decode_regime_boundary(table: dict) -> int | None:
-    """Find the CUDA-graph capture boundary encoded in the decode grid.
+def _prefill_batch_axis_is_flat(table: dict) -> bool:
+    """Certify from the collected data that the prefill batch axis is flat.
 
-    The collector deliberately samples cliff PAIRS (adjacent batches b, b+1
-    straddling the capture limit, e.g. 512/513). On the overlapping KV range
-    the eager side runs a whole regime above the graph side (measured
-    2.6-3.5x), while pad-up neighbours inside the graph region differ by only
-    5-15% — a median ratio >= 2.0 over >= 3 overlapping KV points (the >= 3
-    floor keeps one bad row from minting a cliff) cleanly separates the two.
-    Exactly one cliff is expected per cell; several mean the data does not
-    look like one capture boundary and a human must look.
+    At fixed TOTAL tokens the batch count only changes how the tokens split
+    into causal-attention segments (more, shorter segments = slightly less
+    work); GEMM/MoE see the total alone. Whether that effect is negligible
+    is a property of the MODEL, so it is certified from the data rather than
+    assumed: for each consecutive pair of collected batches, compare their
+    total-token curves (per shared KV slice) on the overlapping range —
+    median |ratio - 1| <= 5% over >= 3 points across the ladder passes.
+    A single collected batch offers no evidence and fails the certificate.
+
+    The comparison happens at matched totals, i.e. within one CUDA-graph
+    regime — the capture cliff lives on the token axis and cannot leak in.
     """
     batches = sorted(table)
-    hits = []
-    for b in batches:
-        upper = table.get(b + 1)
-        if upper is None:
-            continue
-        lower = table[b]
-        lo_keys = sorted(lower)
-        ratios = []
-        for kv in sorted(upper):
-            if lo_keys[0] <= kv <= lo_keys[-1]:
-                base = _decode_curve_value(lower, kv)
-                if base > 0:
-                    ratios.append(float(upper[kv]) / base)
-        if len(ratios) >= 3 and statistics.median(ratios) >= 2.0:
-            hits.append(b)
-    if len(hits) > 1:
-        raise ValueError(
-            f"ambiguous decode regime cliffs at batches {hits}: expected at most one "
-            "CUDA-graph capture boundary per cell; the pair data does not look like "
-            "one capture surface — inspect the collection before serving it."
-        )
-    return hits[0] if hits else None
+    if len(batches) < 2:
+        return False
+    deviations: list[float] = []
+    for lo_b, hi_b in itertools.pairwise(batches):
+        # per-KV-slice total->latency curves for both batches
+        for kv in {kv for totals in table[lo_b].values() for kv in totals} & {
+            kv for totals in table[hi_b].values() for kv in totals
+        }:
+            lower = {total: kvs[kv] for total, kvs in table[lo_b].items() if kv in kvs}
+            upper = {total: kvs[kv] for total, kvs in table[hi_b].items() if kv in kvs}
+            if not lower or not upper:
+                continue
+            lo_keys = sorted(lower)
+            for total in sorted(upper):
+                if lo_keys[0] <= total <= lo_keys[-1]:
+                    base = _decode_curve_value(lower, total)
+                    if base > 0:
+                        deviations.append(abs(float(upper[total]) / base - 1.0))
+    return len(deviations) >= 3 and statistics.median(deviations) <= 0.05
 
 
 def _walk_points(table: dict, depth: int) -> list[tuple]:
@@ -728,6 +751,38 @@ class FPMForwardOp(Operation):
         interp_config = self._interp_config(database)
         table = cell["tables"][self._phase]
         domain = cell["domains"].get(self._phase)
+        clamp_scale = 1.0
+        if self._phase == "prefill":
+            clamp_max = cell.get("prefill_batch_clamp_max")
+            if clamp_max is not None and coords[0] > clamp_max:
+                # Data-certified batch clamp: answer at the collected batch
+                # ceiling with the TRUE totals. Same totals = same GEMM/MoE
+                # work and the same side of the CUDA-graph capture cliff (the
+                # regime coordinate is the token total, untouched here);
+                # fewer, longer segments do slightly MORE attention work, so
+                # the answer is a bounded upper bound. total_kv stays the
+                # real per-step read and is gated honestly below.
+                if coords[2] < _PREFILL_CLAMP_MAX_KV_PRESSURE * coords[1]:
+                    coords = (clamp_max, *coords[1:])
+                else:
+                    # High KV pressure: the coarser segment split overprices
+                    # attention materially, so rescale the measured ceiling
+                    # row by the whole-model SOL ratio between the true and
+                    # clamped shapes. No usable SOL for this model -> stay
+                    # hard-gated (the batch coordinate fails the domain gate
+                    # below) rather than serve a half-modeled value.
+                    clamped_coords = (clamp_max, *coords[1:])
+                    sol = getattr(interp_config, "sol_fn", None)
+                    try:
+                        true_sol = float(sol(*coords)) if sol is not None else 0.0
+                        ceiling_sol = float(sol(*clamped_coords)) if sol is not None else 0.0
+                    except Exception:
+                        true_sol = ceiling_sol = 0.0
+                    if math.isfinite(true_sol) and math.isfinite(ceiling_sol) and true_sol > 0 and ceiling_sol > 0:
+                        # True shape is never costlier than the clamped one
+                        # (more, shorter segments); cap defensively at 1.
+                        clamp_scale = min(true_sol / ceiling_sol, 1.0)
+                        coords = clamped_coords
         if not table or domain is None:
             raise PerfDataNotAvailableError(
                 f"FPM cell {cell['cell_ids']} has no {self._phase} rows (model_path={cell['model_path']!r})."
@@ -741,11 +796,15 @@ class FPMForwardOp(Operation):
                     "FPM never extrapolates; collect a wider sweep or use forward_model='op_level'."
                 )
 
-        if self._phase == "decode" and cell.get("decode_regime_boundary") is not None:
-            # Route AFTER the full-domain gate: each side interpolates among
-            # its own regime; the boundary batch itself is graph-side.
-            side = "decode_graph" if coords[0] <= cell["decode_regime_boundary"] else "decode_eager"
-            table = cell["tables"][side]
+        if self._phase == "decode":
+            bracket = self._decode_bracket(cell, coords, interp_config)
+            if bracket is not None:
+                latency = bracket
+                if not math.isfinite(latency) or latency <= 0:
+                    raise PerfDataNotAvailableError(
+                        f"FPM decode bracket interpolation produced an invalid latency ({latency}) at {coords}."
+                    )
+                return PerformanceResult(latency * clamp_scale * self._scale_factor, energy=0.0, source="silicon")
         result = perf_interp.query(interp_config, table, *coords)
         latency = perf_interp.get_value(result, "latency")
         if not math.isfinite(latency) or latency <= 0:
@@ -754,7 +813,66 @@ class FPMForwardOp(Operation):
             )
         # Latency-only dataset: energy follows the Rust engine-step zero-energy
         # convention rather than fabricating a power figure.
-        return PerformanceResult(latency * self._scale_factor, energy=0.0, source="silicon")
+        return PerformanceResult(latency * clamp_scale * self._scale_factor, energy=0.0, source="silicon")
+
+    def _decode_bracket(self, cell: dict, coords: tuple, interp_config) -> float | None:
+        """Resolve an OFF-LATTICE decode batch by its segment bracket.
+
+        The engine pads decode batches up to capture rungs, so along the
+        batch axis latency is a staircase; every rung is marked in the data
+        by an (x, x+1) row pair. A query between rungs interpolates linearly
+        between its segment's bracket rows {lower_rung + 1, upper_rung} —
+        both run the SAME padded graph, so within the segment the GEMM shape
+        is fixed and attention grows near-linearly with the true request
+        count. Each bracket row's own KV-curve coverage is checked HERE: an
+        uncovered row degrades to the single covered side (or a loud miss) —
+        never to the engine's regime-blind cross-batch k-NN.
+
+        Returns the blended latency, or ``None`` when the query is an
+        own-site hit or the cell has no rung structure (no pairs collected:
+        the legacy scattered-sites path stays).
+        """
+        batch, kv = coords[0], coords[1]
+        rungs = cell.get("decode_rungs") or []
+        table = cell["tables"]["decode"]
+        if not rungs or batch in table:
+            return None
+        below = [r for r in rungs if r < batch]
+        if not below:
+            # Between the domain floor and the first rung: no pair structure
+            # to bracket with — keep the legacy path.
+            return None
+        lo_row = below[-1] + 1
+        above = [r for r in rungs if r >= batch]
+        hi_row = above[0] if above else cell["decode_batches"][-1]
+        bounds = cell["decode_curve_bounds"]
+
+        def covers(row: int) -> bool:
+            low, high = bounds[row]
+            return low <= kv <= high
+
+        lo_ok, hi_ok = covers(lo_row), covers(hi_row)
+        if not lo_ok and not hi_ok:
+            raise PerfDataNotAvailableError(
+                f"FPM decode bracket rows {lo_row}/{hi_row} do not cover total_kv_read_tokens={kv} "
+                f"(curves span {bounds[lo_row]} and {bounds[hi_row]}); FPM never extrapolates."
+            )
+        if not (lo_ok and hi_ok):
+            row = lo_row if lo_ok else hi_row
+            return self._decode_row_value(cell, row, kv, interp_config)
+        lo_value = self._decode_row_value(cell, lo_row, kv, interp_config)
+        if hi_row == lo_row:
+            return lo_value
+        hi_value = self._decode_row_value(cell, hi_row, kv, interp_config)
+        weight = (batch - lo_row) / (hi_row - lo_row)
+        return lo_value + (hi_value - lo_value) * weight
+
+    def _decode_row_value(self, cell: dict, row: int, kv: float, interp_config) -> float:
+        """Own-curve evaluation of one collected decode row at ``kv``
+        (coverage pre-checked): the engine's bisect on that row's own curve —
+        the cross-batch transfer machinery never runs."""
+        result = perf_interp.query(interp_config, cell["tables"]["decode"], row, kv)
+        return float(perf_interp.get_value(result, "latency"))
 
     def query(self, database: PerfDatabase, **kwargs) -> PerformanceResult:
         batch_size = int(kwargs["batch_size"])

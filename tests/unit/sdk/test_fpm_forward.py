@@ -253,23 +253,120 @@ class TestFPMForwardOpQuery:
         with pytest.raises(PerfDataNotAvailableError, match="No FPM cell matches"):
             op.query(fake_db(), batch_size=2, s=1024)
 
-    def test_decode_regime_boundary_detection(self):
-        from aiconfigurator_core.sdk.operations.fpm_forward import _detect_decode_regime_boundary
+    def test_prefill_batch_flatness_certificate(self):
+        from aiconfigurator_core.sdk.operations.fpm_forward import _prefill_batch_axis_is_flat
 
-        graph = {kv: 10.0 + i for i, kv in enumerate((1024, 2048, 4096))}
-        eager = {kv: 3.0 * (10.0 + i) for i, kv in enumerate((1024, 2048, 4096))}
-        # Cliff pair 512/513 (~3x on 3 overlapping KV points) -> boundary 512.
-        assert _detect_decode_regime_boundary({512: graph, 513: eager}) == 512
-        # Pad-up neighbours (~10%) never mint a cliff.
-        pad = {kv: v * 1.1 for kv, v in graph.items()}
-        assert _detect_decode_regime_boundary({8: graph, 9: pad}) is None
-        # Fewer than 3 overlapping points: one bad row cannot mint a cliff.
-        assert _detect_decode_regime_boundary({512: {1024: 10.0, 2048: 11.0}, 513: {1024: 30.0, 2048: 33.0}}) is None
-        # Two cliffs do not look like one capture surface: loud error.
-        with pytest.raises(ValueError, match="ambiguous decode regime cliffs"):
-            _detect_decode_regime_boundary(
-                {512: graph, 513: eager, 1024: eager, 1025: {k: v * 3 for k, v in eager.items()}}
-            )
+        flat = {
+            1: {1024: {0: 10.0}, 2048: {0: 20.0}, 4096: {0: 40.0}},
+            2: {1024: {0: 10.2}, 2048: {0: 20.4}, 4096: {0: 40.8}},
+            4: {1024: {0: 10.4}, 2048: {0: 20.8}, 4096: {0: 41.6}},
+        }
+        assert _prefill_batch_axis_is_flat(flat)
+        # A real batch effect (>5% median) fails the certificate.
+        bumpy = {1: flat[1], 2: {t: {0: v[0] * 1.2} for t, v in flat[1].items()}}
+        assert not _prefill_batch_axis_is_flat(bumpy)
+        # A single collected batch offers no evidence.
+        assert not _prefill_batch_axis_is_flat({1: flat[1]})
+        # Fewer than 3 overlapping points: insufficient evidence.
+        assert not _prefill_batch_axis_is_flat({1: {1024: {0: 10.0}, 2048: {0: 20.0}}, 2: {2048: {0: 20.2}}})
+
+    def _flat_prefill_rows(self):
+        rows = []
+        for b, bump in ((1, 1.0), (2, 1.02), (4, 1.04)):
+            for total, lat in ((1024, 10.0), (2048, 20.0), (4096, 40.0)):
+                rows.append(_row("prefill", b, total, 0, lat * bump))
+            # a high-KV slice so pressure >= 2 queries stay inside the box
+            rows.append(_row("prefill", b, 1024, 4096, 50.0 * bump))
+        return rows
+
+    def test_certified_prefill_batch_clamp_answers_above_the_ceiling(self, fake_db):
+        # Real steps can schedule more whole prefills than the collected
+        # batch ceiling (short sequences). With the flatness certificate the
+        # query clamps its batch coordinate to the ceiling, keeping the TRUE
+        # token total — the regime coordinate — untouched.
+        db = fake_db(self._flat_prefill_rows() + [r for r in _default_rows() if r["workload_kind"] == "decode"])
+        op = _make_op("prefill")
+        assert op._load_cell(db)["prefill_batch_clamp_max"] == 4
+        clamped = float(op.query_totals(db, batch_size=16, total_prefill_tokens=4096, total_kv_read_tokens=0))
+        ceiling = float(op.query_totals(db, batch_size=4, total_prefill_tokens=4096, total_kv_read_tokens=0))
+        assert clamped == pytest.approx(ceiling) == pytest.approx(41.6)
+        # The other axes stay honestly gated: totals beyond the box still miss.
+        with pytest.raises(PerfDataNotAvailableError, match="outside the collected domain"):
+            op.query_totals(db, batch_size=16, total_prefill_tokens=16384, total_kv_read_tokens=0)
+
+    def test_clamp_tiers_on_the_kv_pressure_ceiling(self, fake_db):
+        # LOO-measured boundary (batch_clamp_loo): below kv/T=2 the raw clamp
+        # is median <=2% and is served as-is (measured value, no SOL); at or
+        # above it the ceiling row is SOL-rescaled instead (the raw bound
+        # would loosen to p90 96%).
+        rows = []
+        for b, bump in ((1, 1.0), (2, 1.02), (4, 1.04)):
+            for total, lat in ((1024, 10.0), (2048, 20.0), (4096, 40.0)):
+                rows.append(_row("prefill", b, total, 0, lat * bump))
+                rows.append(_row("prefill", b, total, total, lat * bump * 1.2))
+                rows.append(_row("prefill", b, total, 4 * total, lat * bump * 1.8))
+        db = fake_db(rows)
+        op = _make_op("prefill")
+        # kv/T = 1 (< 2): pure clamp to the ceiling row, no rescale.
+        low = float(op.query_totals(db, batch_size=16, total_prefill_tokens=4096, total_kv_read_tokens=4096))
+        assert low == pytest.approx(40.0 * 1.04 * 1.2)
+        # kv/T = 4 (>= 2): the ceiling row is deflated by the SOL ratio.
+        sol = lambda b, tp, tk: tp * (1.0 + (tp + tk) / max(b, 1.0))
+        high = float(op.query_totals(db, batch_size=16, total_prefill_tokens=4096, total_kv_read_tokens=16384))
+        assert high == pytest.approx(40.0 * 1.04 * 1.8 * sol(16, 4096, 16384) / sol(4, 4096, 16384))
+
+    def test_high_kv_pressure_clamp_rescales_by_the_sol_ratio(self, fake_db):
+        # kv/T = 4 >= 2: the measured ceiling row is rescaled by the
+        # whole-model SOL ratio between the true and clamped shapes (the
+        # coarser split's attention overprice is corrected at the roofline-
+        # predicted share). sol_fn here is the injected test roofline.
+        db = fake_db(self._flat_prefill_rows() + [r for r in _default_rows() if r["workload_kind"] == "decode"])
+        op = _make_op("prefill")
+        ceiling = float(op.query_totals(db, batch_size=4, total_prefill_tokens=1024, total_kv_read_tokens=4096))
+        assert ceiling == pytest.approx(52.0)  # exact row (4, 1024, 4096)
+        sol = lambda b, tp, tk: tp * (1.0 + (tp + tk) / max(b, 1.0))
+        expected = ceiling * (sol(16, 1024, 4096) / sol(4, 1024, 4096))
+        got = float(op.query_totals(db, batch_size=16, total_prefill_tokens=1024, total_kv_read_tokens=4096))
+        assert got == pytest.approx(expected)
+        assert got < ceiling  # the correction always deflates the upper bound
+
+    def test_high_kv_pressure_without_usable_sol_stays_hard_gated(self, fake_db):
+        # A model whose roofline is unusable (empty sol op list -> SOL 0)
+        # answers nothing above the ceiling at high pressure — no
+        # half-modeled value.
+        db = fake_db(self._flat_prefill_rows() + [r for r in _default_rows() if r["workload_kind"] == "decode"])
+        op = FPMForwardOp("prefill", _model_config(), MODEL_PATH, sol_fn=lambda *coords: 0.0, weight_bytes=1.0)
+        with pytest.raises(PerfDataNotAvailableError, match="outside the collected domain"):
+            op.query_totals(db, batch_size=16, total_prefill_tokens=1024, total_kv_read_tokens=4096)
+        # ...while the low-pressure pure clamp needs no SOL at all.
+        low = float(op.query_totals(db, batch_size=16, total_prefill_tokens=4096, total_kv_read_tokens=0))
+        assert low == pytest.approx(41.6)
+
+    def test_uncertified_prefill_batch_stays_hard_gated(self, fake_db):
+        # Default fixture rows carry a single sparse batch pair -> no
+        # certificate -> the domain gate rejects exactly as before.
+        db = fake_db()
+        op = _make_op("prefill")
+        assert op._load_cell(db)["prefill_batch_clamp_max"] is None
+        with pytest.raises(PerfDataNotAvailableError, match="outside the collected domain"):
+            op.query_totals(db, batch_size=16, total_prefill_tokens=512, total_kv_read_tokens=0)
+
+    def test_decode_batch_is_never_clamped(self, fake_db):
+        # The decode batch axis carries a REAL regime cliff (the Task B
+        # partition); a flat-prefill certificate must not leak into it.
+        db = fake_db(self._flat_prefill_rows() + [r for r in _default_rows() if r["workload_kind"] == "decode"])
+        op = _make_op("decode")
+        with pytest.raises(PerfDataNotAvailableError, match="outside the collected domain"):
+            op.query_totals(db, batch_size=4096, total_kv_read_tokens=4096)
+
+    def test_decode_rung_metadata(self, fake_db):
+        # Capture rungs are the batches whose (x, x+1) pair the collector
+        # deliberately sampled; per-row curve bounds feed the coverage guard.
+        db = fake_db(self._cliff_rows())
+        cell = _make_op("decode")._load_cell(db)
+        assert cell["decode_rungs"] == [496, 512]
+        assert cell["decode_batches"] == [496, 497, 512, 513, 1024]
+        assert cell["decode_curve_bounds"][513] == (1024, 4096)
 
     def _cliff_rows(self):
         rows = []
@@ -281,36 +378,58 @@ class TestFPMForwardOpQuery:
                 rows.append(_row("decode", b, 0, kv, base + 3 * i))
         return rows
 
-    def test_decode_regime_routing_separates_the_cliff(self, fake_db):
-        # The b=600 pathology: pre-split, k-NN mixes one eager vote (513)
-        # with three graph votes (496/497/512) and answers ~44% of truth.
-        # Post-split it interpolates among eager batches only.
+    def test_decode_bracket_resolution(self, fake_db):
+        # The b=600 pathology: k-NN mixed one eager vote (513) with three
+        # graph votes (496/497/512) and answered ~44% of truth. Bracket
+        # resolution interpolates between the segment's own rows only.
         db = fake_db(self._cliff_rows())
         op = _make_op("decode")
-        cell = op._load_cell(db)
-        assert cell["decode_regime_boundary"] == 512
-        assert set(cell["tables"]["decode_graph"]) == {496, 497, 512}
-        assert set(cell["tables"]["decode_eager"]) == {513, 1024}
-        # Exact hits on either side are untouched by the split.
+        # Own-site hits are untouched.
         assert float(op.query_totals(db, batch_size=512, total_kv_read_tokens=2048)) == pytest.approx(11.5)
         assert float(op.query_totals(db, batch_size=513, total_kv_read_tokens=2048)) == pytest.approx(34.0)
-        # Off-site queries route by regime: eager-level above, graph-level at
-        # or below the boundary (coarse bands — transfer math is interp's).
-        eager_q = float(op.query_totals(db, batch_size=600, total_kv_read_tokens=2048))
-        graph_q = float(op.query_totals(db, batch_size=500, total_kv_read_tokens=2048))
-        assert eager_q > 25.0
-        assert graph_q < 15.0
-        # In-between eager batches keep working (frontier semantics live
-        # inside the eager sub-table).
-        mid_q = float(op.query_totals(db, batch_size=800, total_kv_read_tokens=2048))
-        assert mid_q > 25.0
+        # b=600 > last rung (512): eager bracket {513, 1024}, linear blend.
+        w = (600 - 513) / (1024 - 513)
+        expected = 34.0 + (65.0 - 34.0) * w
+        assert float(op.query_totals(db, batch_size=600, total_kv_read_tokens=2048)) == pytest.approx(expected)
+        # b=500 in segment (496, 512]: bracket {497, 512} — same padded graph.
+        w = (500 - 497) / (512 - 497)
+        expected = 11.0 + (11.5 - 11.0) * w
+        assert float(op.query_totals(db, batch_size=500, total_kv_read_tokens=2048)) == pytest.approx(expected)
 
-    def test_decode_without_cliff_is_unsplit(self, fake_db):
-        db = fake_db()
+    def test_decode_bracket_coverage_guard(self, fake_db):
+        # Bracket rows with disjoint KV coverage must degrade to the covered
+        # side — or miss loudly — NEVER fall back to cross-batch k-NN.
+        rows = self._cliff_rows()
+        # replace the 1024 row set with a far-KV-only curve
+        rows = [r for r in rows if r["batch_size"] != 1024]
+        for i, kv in enumerate((8192, 16384)):
+            rows.append(_row("decode", 1024, 0, kv, 62.0 + 3 * i))
+        db = fake_db(rows)
+        op = _make_op("decode")
+        # kv covered only by the low row (513): single-sided value.
+        assert float(op.query_totals(db, batch_size=600, total_kv_read_tokens=2048)) == pytest.approx(34.0)
+        # kv covered only by the high row (1024): single-sided value.
+        assert float(op.query_totals(db, batch_size=600, total_kv_read_tokens=8192)) == pytest.approx(62.0)
+        # kv covered by NEITHER bracket row (in-domain gap): loud miss — the
+        # legacy k-NN would have silently answered here.
+        with pytest.raises(PerfDataNotAvailableError, match="bracket rows"):
+            op.query_totals(db, batch_size=600, total_kv_read_tokens=6000)
+
+    def test_decode_without_rungs_keeps_the_legacy_path(self, fake_db):
+        # No (x, x+1) pairs collected -> no bracket structure: off-lattice
+        # queries keep today's scattered-sites transfer.
+        rows = []
+        for b, base in ((8, 6.0), (64, 12.0)):
+            for i, kv in enumerate((1024, 2048, 4096)):
+                rows.append(_row("decode", b, 0, kv, base + i))
+        db = fake_db(rows)
         op = _make_op("decode")
         cell = op._load_cell(db)
-        assert cell["decode_regime_boundary"] is None
-        assert "decode_graph" not in cell["tables"]
+        assert cell["decode_rungs"] == []
+        # off-lattice: legacy transfer answers (value between the two sites'
+        # magnitudes; exact math is the interp engine's).
+        got = float(op.query_totals(db, batch_size=20, total_kv_read_tokens=2048))
+        assert 5.0 < got < 15.0
 
     def test_query_totals_addresses_raw_coordinates(self, fake_db):
         # Totals a mixed step schedules (chunk + riders) are generally not

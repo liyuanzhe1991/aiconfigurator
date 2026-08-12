@@ -188,6 +188,52 @@ impl FpmForwardOp {
         cell: &FpmForwardCell,
         coords: &[f64],
     ) -> Result<PerformanceResult, AicError> {
+        // Data-certified prefill batch clamp (mirrors Python _resolve): the
+        // regime coordinate is the token TOTAL, which stays untouched — the
+        // clamped query prices the same side of the capture cliff and is a
+        // bounded upper bound on attention. Decode is NEVER clamped (its
+        // batch axis carries a real regime cliff — the Task B partition).
+        // KV-pressure tiering (mirrors Python _PREFILL_CLAMP_MAX_KV_PRESSURE):
+        // randtok LOO measured the raw clamp at median <= 2% below kv/T = 2
+        // (served as-is: measured value, no SOL) and median 14% / p90 96%
+        // above it — there the measured ceiling row is rescaled by the
+        // whole-model SOL ratio between the true and clamped shapes (LOO:
+        // median 4.5% / p90 13%), and ONLY when this model's SOL is usable:
+        // an unported roofline (DSA/MSA) answers nothing rather than
+        // something half-modeled (the batch coordinate then fails the
+        // domain gate below).
+        const MAX_KV_PRESSURE: f64 = 2.0;
+        let clamped: Vec<f64>;
+        let mut clamp_scale = 1.0_f64;
+        let coords = match (self.phase, cell.prefill_batch_clamp_max) {
+            (FpmPhase::Prefill, Some(max)) if coords[0] > max as f64 => {
+                let low_pressure = coords[2] < MAX_KV_PRESSURE * coords[1];
+                let mut routed = coords;
+                if low_pressure {
+                    clamped = std::iter::once(max as f64)
+                        .chain(coords[1..].iter().copied())
+                        .collect();
+                    routed = clamped.as_slice();
+                } else {
+                    let candidate: Vec<f64> = std::iter::once(max as f64)
+                        .chain(coords[1..].iter().copied())
+                        .collect();
+                    let true_sol = sol_total(&self.sol_ops, self.phase, db, coords);
+                    let ceiling_sol = sol_total(&self.sol_ops, self.phase, db, &candidate);
+                    if let (Ok(t), Ok(c)) = (true_sol, ceiling_sol) {
+                        if t.is_finite() && c.is_finite() && t > 0.0 && c > 0.0 {
+                            // True shape is never costlier than the clamped
+                            // one (more, shorter segments); cap at 1.
+                            clamp_scale = (t / c).min(1.0);
+                            clamped = candidate;
+                            routed = clamped.as_slice();
+                        }
+                    }
+                }
+                routed
+            }
+            _ => coords,
+        };
         // Per-axis inclusive bounding-box gate BEFORE perf_interp: whole-model
         // latency has no principled boundary-hold semantics.
         let (axes, domain, index): (&[&str], &[(u32, u32)], _) = match self.phase {
@@ -201,17 +247,7 @@ impl FpmForwardOp {
                 let Some(domain) = cell.decode_domain.as_ref() else {
                     return Err(self.no_rows_err(cell));
                 };
-                // Regime routing AFTER the full-domain gate (the gate uses
-                // the whole decode box): the boundary batch itself is
-                // graph-side; each side interpolates among its own regime.
-                let index = match cell.decode_regime_boundary {
-                    Some(boundary) if coords[0] <= boundary as f64 => {
-                        cell.decode_graph_index.as_ref()
-                    }
-                    Some(_) => cell.decode_eager_index.as_ref(),
-                    None => cell.decode_index.as_ref(),
-                };
-                (&FPM_DECODE_AXES, domain.as_slice(), index)
+                (&FPM_DECODE_AXES, domain.as_slice(), cell.decode_index.as_ref())
             }
         };
         for (axis_index, (axis_name, &value)) in axes.iter().zip(coords).enumerate() {
@@ -248,9 +284,19 @@ impl FpmForwardOp {
             }
         };
         let cfg = interp_config(self.phase, &sol);
+        if self.phase == FpmPhase::Decode {
+            if let Some(latency) = self.decode_bracket(cell, coords, index, &cfg)? {
+                if !latency.is_finite() || latency <= 0.0 {
+                    return Err(data_err(format!(
+                        "FPM decode bracket interpolation produced an invalid latency ({latency}) at {coords:?}."
+                    )));
+                }
+                return Ok(PerformanceResult::new(latency, Source::Silicon));
+            }
+        }
         let latency = index
             .resolve_value(&cfg, coords)
-            .map(|value| value.latency)
+            .map(|value| value.latency * clamp_scale)
             .map_err(|err| {
                 match sol_failure.borrow_mut().take() {
                     Some(sol_err) => data_err(format!("{err}; SOL roofline unavailable: {sol_err}")),
@@ -265,6 +311,74 @@ impl FpmForwardOp {
         }
         // Latency-only dataset; scale_factor is fixed 1.0 in Python.
         Ok(PerformanceResult::new(latency, Source::Silicon))
+    }
+
+    /// Resolve an OFF-LATTICE decode batch by its segment bracket (mirrors
+    /// Python `_decode_bracket`): the engine pads decode batches to capture
+    /// rungs — every rung marked by an (x, x+1) row pair — so a query
+    /// between rungs interpolates linearly between its segment's bracket
+    /// rows {lower_rung + 1, upper_rung}, both running the SAME padded
+    /// graph. Coverage of each bracket row's own KV curve is checked here:
+    /// an uncovered row degrades to the single covered side (or a loud
+    /// miss) — never to the engine's regime-blind cross-batch k-NN.
+    ///
+    /// `Ok(None)` = own-site hit or no rung structure (legacy path stays).
+    fn decode_bracket(
+        &self,
+        cell: &FpmForwardCell,
+        coords: &[f64],
+        index: &crate::perf_database::perf_interp::SiteIndex,
+        cfg: &OpInterpConfig,
+    ) -> Result<Option<f64>, AicError> {
+        let (batch, kv) = (coords[0], coords[1]);
+        if cell.decode_rungs.is_empty()
+            || cell.decode_curve_bounds.keys().any(|&b| b as f64 == batch)
+        {
+            return Ok(None);
+        }
+        let Some(&lower_rung) = cell.decode_rungs.iter().rev().find(|&&r| (r as f64) < batch)
+        else {
+            // Between the domain floor and the first rung: no pair structure
+            // to bracket with — keep the legacy path.
+            return Ok(None);
+        };
+        let lo_row = lower_rung + 1;
+        let hi_row = cell
+            .decode_rungs
+            .iter()
+            .copied()
+            .find(|&r| (r as f64) >= batch)
+            .unwrap_or(*cell.decode_batches.last().expect("non-empty lattice"));
+        let covers = |row: u32| {
+            let (low, high) = cell.decode_curve_bounds[&row];
+            (low as f64) <= kv && kv <= (high as f64)
+        };
+        let (lo_ok, hi_ok) = (covers(lo_row), covers(hi_row));
+        if !lo_ok && !hi_ok {
+            return Err(data_err(format!(
+                "FPM decode bracket rows {lo_row}/{hi_row} do not cover total_kv_read_tokens={kv}                  (curves span {:?} and {:?}); FPM never extrapolates.",
+                cell.decode_curve_bounds[&lo_row], cell.decode_curve_bounds[&hi_row]
+            )));
+        }
+        let row_value = |row: u32| -> Result<f64, AicError> {
+            // Own-curve evaluation (coverage pre-checked): the engine's
+            // bisect on that row's own curve — cross-batch transfer never
+            // runs.
+            index
+                .resolve_value(cfg, &[row as f64, kv])
+                .map(|value| value.latency)
+        };
+        if !(lo_ok && hi_ok) {
+            let row = if lo_ok { lo_row } else { hi_row };
+            return Ok(Some(row_value(row)?));
+        }
+        let lo_value = row_value(lo_row)?;
+        if hi_row == lo_row {
+            return Ok(Some(lo_value));
+        }
+        let hi_value = row_value(hi_row)?;
+        let weight = (batch - lo_row as f64) / (hi_row as f64 - lo_row as f64);
+        Ok(Some(lo_value + (hi_value - lo_value) * weight))
     }
 
     fn no_rows_err(&self, cell: &FpmForwardCell) -> AicError {
@@ -394,6 +508,135 @@ mod tests {
             prefix,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn certified_prefill_batch_clamp_routes_to_the_ceiling() {
+        use crate::perf_database::fpm_forward::tests::RowSpec;
+        let mk = |batch: u32, total: u32, lat: f64| RowSpec {
+            workload_kind: "prefill",
+            batch_size: batch,
+            total_prefill_tokens: total,
+            total_kv_read_tokens: 0,
+            latency_ms: lat,
+            ..RowSpec::default()
+        };
+        let mut rows = Vec::new();
+        for (b, bump) in [(1u32, 1.0), (2, 1.02), (4, 1.04)] {
+            for (total, lat) in [(1024u32, 10.0), (2048, 20.0), (4096, 40.0)] {
+                rows.push(mk(b, total, lat * bump));
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        write_pair(tmp.path(), &rows);
+        let db = db_with_pair(tmp.path());
+        // batch 16 > ceiling 4: clamp keeps the TRUE total (regime
+        // coordinate) and answers the (4, 4096, 0) leaf.
+        let clamped = op(FpmPhase::Prefill)
+            .query_totals(&db, &[16.0, 4096.0, 0.0])
+            .unwrap();
+        assert!((clamped.latency_ms - 41.6).abs() < 1e-9, "{}", clamped.latency_ms);
+        // The token axis stays honestly gated.
+        let err = op(FpmPhase::Prefill)
+            .query_totals(&db, &[16.0, 16384.0, 0.0])
+            .unwrap_err();
+        assert!(err.to_string().contains("outside the collected domain"), "{err}");
+    }
+
+    #[test]
+    fn clamp_tiers_on_the_kv_pressure_ceiling() {
+        use crate::perf_database::fpm_forward::tests::RowSpec;
+        let mk = |batch: u32, total: u32, kv: u32, lat: f64| RowSpec {
+            workload_kind: "prefill",
+            batch_size: batch,
+            total_prefill_tokens: total,
+            total_kv_read_tokens: kv,
+            latency_ms: lat,
+            ..RowSpec::default()
+        };
+        let mut rows = Vec::new();
+        for (b, bump) in [(1u32, 1.0), (2, 1.02), (4, 1.04)] {
+            for (total, lat) in [(1024u32, 10.0), (2048, 20.0), (4096, 40.0)] {
+                rows.push(mk(b, total, 0, lat * bump));
+                rows.push(mk(b, total, total, lat * bump * 1.2));
+                rows.push(mk(b, total, 4 * total, lat * bump * 1.8));
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        write_pair(tmp.path(), &rows);
+        let db = db_with_pair(tmp.path());
+        // kv/T = 1 (< 2): clamps to the (4, 4096, 4096) leaf.
+        let low = op(FpmPhase::Prefill)
+            .query_totals(&db, &[16.0, 4096.0, 4096.0])
+            .unwrap();
+        assert!((low.latency_ms - 40.0 * 1.04 * 1.2).abs() < 1e-9, "{}", low.latency_ms);
+        // kv/T = 4 (>= 2): this op has NO usable SOL (empty sol_ops -> 0),
+        // so the high-pressure tier refuses rather than serve a
+        // half-modeled value.
+        let err = op(FpmPhase::Prefill)
+            .query_totals(&db, &[16.0, 4096.0, 16384.0])
+            .unwrap_err();
+        assert!(err.to_string().contains("outside the collected domain"), "{err}");
+        // With a usable roofline the same query answers, rescaled by the
+        // SOL ratio (elementwise SOL depends on the total alone -> ratio 1,
+        // proving the arm activates; the ratio math itself is pinned
+        // cross-engine by the parity suite).
+        let mut sol_op = op(FpmPhase::Prefill);
+        sol_op.sol_ops = vec![Op::Elementwise(crate::operators::ElementwiseOp {
+            name: "elementwise".to_string(),
+            scale_factor: 1.0,
+            bytes_per_token: 4096.0,
+            scale_num_tokens: 1,
+            seq_split: 0,
+        })];
+        let high = sol_op.query_totals(&db, &[16.0, 4096.0, 16384.0]).unwrap();
+        assert!((high.latency_ms - 40.0 * 1.04 * 1.8).abs() < 1e-9, "{}", high.latency_ms);
+    }
+
+    #[test]
+    fn decode_bracket_resolution_and_coverage_guard() {
+        use crate::perf_database::fpm_forward::tests::RowSpec;
+        let mk = |batch: u32, kv: u32, lat: f64| RowSpec {
+            workload_kind: "decode",
+            batch_size: batch,
+            total_prefill_tokens: 0,
+            total_kv_read_tokens: kv,
+            latency_ms: lat,
+            ..RowSpec::default()
+        };
+        let mut rows = Vec::new();
+        for (b, base) in [(496u32, 9.5), (497, 10.0), (512, 10.5)] {
+            for (i, kv) in [1024u32, 2048, 4096].into_iter().enumerate() {
+                rows.push(mk(b, kv, base + i as f64));
+            }
+        }
+        for (i, kv) in [1024u32, 2048, 4096].into_iter().enumerate() {
+            rows.push(mk(513, kv, 31.0 + 3.0 * i as f64));
+        }
+        for (i, kv) in [8192u32, 16384].into_iter().enumerate() {
+            rows.push(mk(1024, kv, 62.0 + 3.0 * i as f64));
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        write_pair(tmp.path(), &rows);
+        let db = db_with_pair(tmp.path());
+        let dec = op(FpmPhase::Decode);
+        // b=500 in segment (496, 512]: bracket {497, 512}, linear blend.
+        let got = dec.query_totals(&db, &[500.0, 2048.0]).unwrap();
+        let expected = 11.0 + (11.5 - 11.0) * (500.0 - 497.0) / (512.0 - 497.0);
+        assert!((got.latency_ms - expected).abs() < 1e-9, "{}", got.latency_ms);
+        // b=600 above the last rung: bracket {513, 1024}; kv=2048 covered
+        // only by 513 -> single-sided (never the cross-batch k-NN).
+        let got = dec.query_totals(&db, &[600.0, 2048.0]).unwrap();
+        assert!((got.latency_ms - 34.0).abs() < 1e-9, "{}", got.latency_ms);
+        // kv=8192 covered only by 1024 -> the other single side.
+        let got = dec.query_totals(&db, &[600.0, 8192.0]).unwrap();
+        assert!((got.latency_ms - 62.0).abs() < 1e-9, "{}", got.latency_ms);
+        // kv=6000 covered by NEITHER bracket row: loud miss.
+        let err = dec.query_totals(&db, &[600.0, 6000.0]).unwrap_err();
+        assert!(err.to_string().contains("bracket rows"), "{err}");
+        // Own-site hits untouched by any of this.
+        let got = dec.query_totals(&db, &[512.0, 2048.0]).unwrap();
+        assert!((got.latency_ms - 11.5).abs() < 1e-9);
     }
 
     #[test]

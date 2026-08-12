@@ -2125,7 +2125,9 @@ _FPM_ROWS = [
     ("prefill", 1, 1024, 0, 18.0),
     ("prefill", 1, 2048, 0, 34.0),
     ("prefill", 1, 1024, 1024, 21.0),
+    ("prefill", 2, 1024, 0, 18.5),
     ("prefill", 2, 2048, 0, 35.0),
+    ("prefill", 2, 4096, 0, 69.0),
     ("prefill", 4, 4096, 0, 68.0),
     ("decode", 1, 0, 1, 2.0),
     ("decode", 1, 0, 1025, 2.2),
@@ -2319,6 +2321,8 @@ class TestRustEngineStepFpmParity:
             ("static_gen", 4, 1024, 2, 0),  # exact decode hit at B=4
             ("static_gen", 2, 1024, 2, 0),  # uncollected batch -> transfer (SOL)
             ("static_gen", 4, 9_000_000, 2, 0),  # out of domain -> both error
+            ("static_ctx", 16, 256, 1, 0),  # above the batch ceiling -> pure clamp (kv/T = 0)
+            ("static_ctx", 16, 320, 1, 256),  # high KV pressure -> SOL-rescaled clamp
         ],
     )
     def test_fpm_static_parity(self, fpm_systems_root, monkeypatch, mode, batch, isl, osl, prefix):
@@ -2336,6 +2340,7 @@ class TestRustEngineStepFpmParity:
             (0, 4, 1024, 2),  # gen-only keeps full decode
             (0, 600, 100, 2),  # gen-only across the decode regime boundary (eager side)
             (1024, 0, 1024, 2),  # prefill-only chunk
+            (4096, 0, 256, 1),  # 16 whole prefills: certified batch clamp to the ceiling
         ],
     )
     def test_fpm_mixed_step_parity(self, fpm_systems_root, monkeypatch, ctx_tokens, gen_tokens, isl, osl):
