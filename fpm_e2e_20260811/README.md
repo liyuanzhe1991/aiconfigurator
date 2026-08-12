@@ -12,6 +12,7 @@
 | `HANDOVER_MODELING.md` | **modeling session 从这里开始**:任务 A(mixed 公式)+ 任务 B(decode 批轴 regime 分区)执行书,含验收门与禁改清单 |
 | `HANDOVER_BATCH_SEGMENT.md` | 批轴"段内括住"收尾改造(退役 k-NN)执行书,验收 oracle = `bracket_expected.csv` |
 | `HANDOVER_DYNAMO_FPM.md` | dynamo-FPM 自基准改动全记录(randtok2):根因、salt 配对、镜像谱系、遗留三问题与上游化建议 |
+| `L3_PLAN_V2.html` | **下一战役 L3 精度评测方案**:三分层测试集(A采集点/B离网/C外插)、矩阵生成器规范、指标(MAPE/P95/MAX APE+坐标)、工程四升级 |
 | `MIXED_FORMULA_SPEC.md` | 公式推导全文 + 机制论证(交接书的依据) |
 
 ## 数据(全部可复算)

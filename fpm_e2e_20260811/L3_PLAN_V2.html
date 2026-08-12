@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>L3 精度评测方案 v2 — FPM 采集建模 vs 真实</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         max-width: 1080px; margin: 24px auto; padding: 0 20px; color: #1a1a2e; line-height: 1.65; }
+  h1 { font-size: 26px; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+  h2 { font-size: 20px; margin-top: 34px; color: #1e3a8a; border-left: 4px solid #2563eb; padding-left: 10px; }
+  h3 { font-size: 16px; margin-top: 22px; color: #334155; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th { background: #1e3a8a; color: #fff; padding: 7px 10px; text-align: left; }
+  td { border: 1px solid #cbd5e1; padding: 6px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f1f5f9; }
+  code, pre { font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+  .box { border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .rule { background: #eff6ff; border-left: 4px solid #2563eb; }
+  .warn { background: #fef2f2; border-left: 4px solid #dc2626; }
+  .ok   { background: #f0fdf4; border-left: 4px solid #16a34a; }
+  .tag { display: inline-block; border-radius: 4px; padding: 0 7px; font-size: 12px; font-weight: 600; color: #fff; margin-right: 4px; }
+  .tA { background: #16a34a; } .tB { background: #d97706; } .tC { background: #7c3aed; }
+  .meta { color: #64748b; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>L3 精度评测方案 v2</h1>
+<p class="meta">2026-08-12 · 适用:GLM5.2@B200、MiniMax-M2.7@H100/H200 多并行战役,及此后的所有"采集建模 vs 真实"评测 ·
+依据:fpm-all-20260811 战役全部实测教训(证据见 <code>LEDGER.md</code>)</p>
+
+<h2>0. 定位与原则</h2>
+<div class="box rule">
+<b>精度评测的唯一判据是 L3</b>:真实流量下每个调度步的 FPM 流实测墙钟 vs 模型在该步精确坐标上的预测。
+L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只作 gap 归因/debug 与 modeling 改动的回归 oracle,不进精度报告正文。
+</div>
+<ul>
+<li><b>配置一致性是前提且必须主动验证</b>:采集 cell / serve 栈同镜像、同 engine args(capture 面、调度模式、prefix caching);每个流量段用"纯步对时"核验(与采集同坐标 ±3% 才放行)。</li>
+<li><b>ground truth 只认 FPM 流逐步实测</b>;客户端 TTFT/TPOT 仅交叉参考,永不作判据。</li>
+<li><b>统计禁止正负相抵</b>;全点位表必出;已知固有地板如实标注、禁止常数补偿。</li>
+</ul>
+
+<h2>1. 上一轮 L3 的审计结论(本方案要修的)</h2>
+<table>
+<tr><th>维度</th><th>上轮现状</th><th>缺口 → 本方案动作</th></tr>
+<tr><td>拓扑</td><td>只有 TEP8 有真实流量</td><td>每个 模型×硬件×并行 cell 一套完整 L3</td></tr>
+<tr><td>prefill bs</td><td>只到采集格上限(1-4)</td><td>burst 矩阵补 bs 轴 + C 组外插验证(§3)</td></tr>
+<tr><td>decode eager 区</td><td>仅一个 b1024 窗</td><td>B* 悬崖邻域 + eager 段中点窗(§4)</td></tr>
+<tr><td>mixed</td><td>chunk+Bd 永远偏格,公式/插值误差不可分;bd64 小 chunk 窗零稳态步</td><td>A 组构造技巧 + 池先行驱动修复(§5)</td></tr>
+<tr><td>工程</td><td>手工记流行号(混段事故)、稳态步产出低、无自动补窗</td><td>§7 四项升级</td></tr>
+</table>
+
+<h2>2. 三分层框架(每个 cell 的测试集结构)</h2>
+<table>
+<tr><th>层</th><th>定义</th><th>验证什么</th><th>归属判定</th></tr>
+<tr><td><span class="tag tA">A</span>采集点</td><td>步坐标(或 mixed 的分量坐标)精确命中 parquet 行</td><td><b>数据保真 vs 真实</b>(全零 bug 属于这层)</td>
+<td rowspan="3">生成器对着 parquet <b>逐点程序断言</b>(<code>assert on_grid == expected</code>),人不判</td></tr>
+<tr><td><span class="tag tB">B</span>域内离网</td><td>域内但无采集行</td><td><b>插值 vs 真实</b></td></tr>
+<tr><td><span class="tag tC">C</span>域外外插</td><td><b>仅 prefill bs 轴</b>:bp &gt; 采集上限 B<sub>c</sub></td><td>新增的 bs 外插功能</td></tr>
+</table>
+<div class="box warn"><b>外插边界(硬规则)</b>:C 组只存在于 prefill(及 mixed 的 prefill 分量)。decode 的 B 轴严格域内,
+不生成任何 decode 外插窗;模型在 B &gt; 采集最大批处照旧拒答。</div>
+
+<h2>3. prefill 矩阵(burst 法)</h2>
+<h3>3.1 制造方式</h3>
+<p>一次性齐发 bp 条等长随机 token 请求,约束 <code>bp × tok ≤ max_num_batched_tokens</code> ⇒ 整个 burst 落在
+<b>同一个调度步</b>,坐标 = (bp, bp×tok, 0),FPM 流逐步可读。每格 20 次 burst 取中位。</p>
+<h3>3.2 点位推导规则(零手写常数,输入 = parquet + resolved-config)</h3>
+<table>
+<tr><th>参数</th><th>推导规则</th></tr>
+<tr><td>锚点 bp(A 组)</td><td>= 采集格里的全部 bs 值(逐行)</td></tr>
+<tr><td>外插 bp(C 组)</td><td>{1.5, 2, 3, 4, 6, 8, 12, 16} × B<sub>c</sub>,截断于 min(max_num_seqs, 预算/tok);<b>误差按 bp/B<sub>c</sub> 倍数分层</b></td></tr>
+<tr><td>tok 档</td><td>burst 总量落在 capture 边界(悬崖对导出)的 {0.5, 0.9, 1.1, 2, 4}× 处,截断于预算;对齐采集 token 格以复用锚点</td></tr>
+<tr><td>B 组(域内离网)</td><td>tok = 相邻采集档中点(bp ≤ B<sub>c</sub>);每对相邻档 ≥1 样本</td></tr>
+<tr><td>prefix 子矩阵</td><td>bp ∈ {1.5B<sub>c</sub>, 2B<sub>c</sub>} × tok 中档 × prefix = prefix 格 1/4、3/4 分位;可行性 tok+prefix ≤ max_model_len − block</td></tr>
+</table>
+<div class="box rule">引擎配置与 prefill 采集 cell 严格同参(sync 调度 + 采集 capture 面 + prefix caching ON);burst 用随机 prompt 避免跨请求前缀命中。</div>
+
+<h2>4. decode 矩阵(窗口法,无外插)</h2>
+<h3>4.1 A 组命中由算术保证</h3>
+<p>并发 C = 采集批值的窗口内,每步 KV 总量恰好递增 C;采集行总量都是 C×s ⇒ 窗口 KV 扫过的区间内,
+<b>每个采集 s 值被真实步精确命中一次</b>。生成器只需保证窗口 [isl, isl+osl] 覆盖目标 s 值。</p>
+<h3>4.2 点位推导规则</h3>
+<table>
+<tr><th>参数</th><th>推导规则</th></tr>
+<tr><td>B 阶梯</td><td>采集批格分位数(A 组)+ 悬崖对邻域 B*、B*±邻近整数 + eager 段中点(B* 与最大采集批之间,B 组)</td></tr>
+<tr><td>KV 带</td><td>每请求 s = 该批曲线覆盖的 {1/6, 1/3, 1/2, 2/3, 5/6} 分位(A 组扫过命中 + 分位间自然产生 B 组步);上限尊重 max_model_len</td></tr>
+<tr><td>巨 KV 标记</td><td>KV 总量 ≥ 该 cell KV 域上四分位的窗 → <b>强制多启动(≥3)取中位</b>(档位抽签地板,LEDGER 七启动判别)</td></tr>
+<tr><td>off-capture 批次</td><td>真实流量本身在批次间迁移,逐步打分自然覆盖;不设专窗</td></tr>
+</table>
+
+<h2>5. mixed 矩阵(分量分层)</h2>
+<p>parquet 无 mixed 行;模型值 = <code>pre(bp, chunk+Bd, kvp) + max(0, dec(Bd,kvd) − base(Bd))</code>。分层对<b>分量坐标</b>做:</p>
+<table>
+<tr><th>层</th><th>构造</th><th>意义</th></tr>
+<tr><td><span class="tag tA">A</span></td><td><b>chunk = 采集token档 − Bd</b>(使 chunk+Bd 恰落采集行)且 Bd = 采集 decode 批值,kvd 由池算术命中</td><td><b>纯公式误差</b>——插值完全排除。验收门挂这里</td></tr>
+<tr><td><span class="tag tB">B</span></td><td>chunk = 档间中点等,任一分量走插值</td><td>公式+插值联合误差(参考)</td></tr>
+<tr><td><span class="tag tC">C</span></td><td>bp ∈ {2, B<sub>c</sub>, 1.5B<sub>c</sub>, 2B<sub>c</sub>} 条短 prompt 齐发 + 稳定 decode 池(bp×tok + Bd ≤ 预算)</td><td>bs 外插在组合公式里的表现;bp &gt; B<sub>c</sub> 时标 C,不混入 B 组统计</td></tr>
+</table>
+<h3>5.1 覆盖轴</h3>
+<ul>
+<li><b>跨 regime 对必含</b>:chunk+Bd = capture 边界 ±ε(公式主战场);</li>
+<li><b>kvp</b>:isl = k×chunk(k∈{2,4}),窗口内 chunk 步自带递进 kvp,逐步打分覆盖;</li>
+<li><b>kvd</b>:decode 池 ISL 取 decode KV 域两档分位;</li>
+<li><b>Bd</b>:采集 decode 批格分位子集。</li>
+</ul>
+<h3>5.2 驱动修复(bd64 零稳态步的教训)</h3>
+<div class="box ok">池先行:ignore-eos 长 OSL 请求先灌满并稳定 decode 池 → chunked prefill 请求限速逐条注入;
+稳态判据 = (bd == 池标称 且 tp == chunk);每窗稳态步 n ≥ 15,不足自动延窗。</div>
+<div class="box warn">已知公式残差(graph 侧 marginal 重复计费 +8~15%、eager 侧纯行超估 ×1.13~1.16;LEDGER 严格验证章)——
+modeling 更新若未修,A 组会如实显出,按"已知问题复现"记账;修了,A 组即其验收。</div>
+
+<h2>6. 指标(统一定义)</h2>
+<pre>每个评测格:  APE = |model − measured_median| / measured_median   (附窗内 IQR 与稳态步数 n)
+每层每相位:  MAPE = mean(APE)
+             P95 APE = 95 分位(报出发生坐标:完整五元组 bp/tp/kvp/Bd/kvd 或 (b, s))
+             MAX APE = 最大值(报出发生坐标)
+C 组另出:    误差 vs 外插倍数(bp/B_c ∈ ≤2×, 2-4×, 4-8×, 8-16×)分层曲线</pre>
+<ul>
+<li>全点位明细表必出(每格:坐标、实测中位、IQR、n、模型值、APE、层标签);</li>
+<li>点集 n &lt; 20 时 P95 注明实际含义(≈次差点);</li>
+<li>临时门(终值由用户定):prefill C 组 ≤2× 外插 MAPE ≤ 10%,更远只记录;mixed 门挂 A 组。</li>
+</ul>
+
+<h2>7. 工程升级(四项,全部因上轮事故)</h2>
+<table>
+<tr><th>#</th><th>升级</th><th>治的病</th></tr>
+<tr><td>1</td><td>每窗自动记录引擎 session id + counter 区间入 TSV</td><td>累积流混段(上轮手工行号出过事故)</td></tr>
+<tr><td>2</td><td>每段开头自动跑纯步对时(采集同坐标 ±3% 放行)</td><td>时序语义/配置漂移静默污染真值</td></tr>
+<tr><td>3</td><td>稳态步产出 n≥15 强制 + 自动延窗</td><td>bd64 窗零稳态步、统计不足</td></tr>
+<tr><td>4</td><td>全矩阵无人值守驱动(带产出检查与失败重试)</td><td>逐窗手工驱动低效易漏</td></tr>
+</table>
+
+<h2>8. 矩阵生成器规范(make_l3_matrix.py)</h2>
+<pre>输入:  parquet(该 cell)、resolved-config dump(采集工件现成)
+输出:  burst 计划 + 窗口计划 + mixed 计划(每点带层标签与可行性证明)
+       coverage_report.json(每层每轴配额达成情况)
+断言:  每点层归属 assert 对 parquet;可行性(预算/max_model_len/max_num_seqs/块对齐)
+失败:  任一配额不满 ⇒ 生成失败不发车。配额:
+       A 组 — 采集格值覆盖率 ≥80%(decode 每批 ≥3 KV 深度;prefill 每 bs×每档 ≥1)
+       B 组 — 每对相邻格值之间 ≥1 样本(大间隙不遗漏)
+       C 组 — 每个外插倍数层 ≥2 个 tok 档,graph/eager 各有样本</pre>
+
+<h2>9. 执行计划</h2>
+<table>
+<tr><th>步骤</th><th>内容</th><th>预算</th></tr>
+<tr><td>0(等待期)</td><td>写生成器,在 M2.7 老数据上空转自检;<b>B200 镜像准备</b>(randtok 补丁重新 crane 到 B200 基底,x86 层不可复用)</td><td>本地</td></tr>
+<tr><td>1</td><td>新 modeling × 老数据重评:L3 语料复放(12,647 步 + 稳态 mixed)+ 探针 oracle 复放</td><td>离线,小时级</td></tr>
+<tr><td>2</td><td>GLM5.2@B200、M2.7@H100/H200 多并行:采集 → L0 自检+单调性扫描(静默)→ 建模预测 → 本方案 L3</td><td>单 cell 全套 L3 ≈ 2.5h(栈 ~10min + decode ~40min + prefill ~35min + mixed ~45min + 富余)</td></tr>
+</table>
+<div class="box rule">GLM5.2 预检:量化路径与 kernel 支持先行确认(前例:glm-nvfp4 因 FP4 kernel 缺失被 GB200 拒)。</div>
+
+<h2>10. 已知固有地板(报告尾部如实标注,不补偿)</h2>
+<table>
+<tr><th>地板</th><th>量级</th><th>处置</th></tr>
+<tr><td>decode 路由分布带(合成均匀随机 ≠ 真实文本偏斜)</td><td>-5~-9%</td><td>qwen32b dense 对照做完前如实记;禁常数</td></tr>
+<tr><td>巨 KV 档位抽签(引擎多档,graph 捕获态主嫌)</td><td>±15-40% → 多启动中位后 ±10-20%</td><td>标记窗多启动;upstream determinism issue</td></tr>
+<tr><td>kernel-plan 振荡口袋(形状敏感,可复现非坏行)</td><td>局部 ±25%</td><td>文档化;格点命中不受影响</td></tr>
+</table>
+
+<p class="meta">证据与工具索引:LEDGER.md(总账)· probes_v2_scores.csv / bracket_expected.csv(L2 oracle)·
+probes_v2/pocket/(七启动判别)· mixed_validation_v3_steady.csv(mixed 严格验证)·
+HANDOVER_MODELING / BATCH_SEGMENT / DYNAMO_FPM(三份交接书)</p>
+
+</body>
+</html>
