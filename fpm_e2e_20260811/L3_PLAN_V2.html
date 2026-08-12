@@ -67,6 +67,15 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <b>prefill past-kv 配额</b>:prefix&gt;0 的单元占 prefill 域内 ≥60%;prefix 值按<b>数值范围对数分位</b>取
 (0.02/0.08/0.25/0.5/0.75/0.95),不按格索引分位(prefix 格顶部密集,索引分位会挤在 200k+)。</div>
 
+<h2>2.9 主干结构(定稿):幂阶梯 × past-kv 锚点轴</h2>
+<div class="box rule">
+<b>prefill</b>:ISL 在网主干 = 2 的幂(128 → max_model_len,必测);ISL 离网 = 相邻幂几何中点(<b>与在网等量</b>)。
+≤ 预算单步 burst,&gt; 预算走长请求(chunked prefill 逐步打分,kv&gt;0 变体白送深上下文步)。
+每个 [bs, n] 挂 <b>past-kv 锚点轴</b>:在网锚 {0, 256, 1024, 4096}(大 n 按需扩 16384/65536)+ 少量离网插点(几何中点,16 对齐)。<br>
+<b>decode</b>:bs 在网主干 = 2 的幂(1 → 256 或显存上限,必测)+ 悬崖对 + 最大采集批;bs 离网 = 幂间隙点(<b>与在网等量</b>)。
+每个 bs 挂 s 锚点轴:浅扫段一窗覆盖低位锚(在网+离网),按需跳扫 @16384/65536(≤ 曲线顶),顶端扫进口袋区(代表批 ×3 启动)。
+层归属全部逐点对 parquet 断言;必测主干不参与抽样削减。</div>
+
 <h2>3. prefill 矩阵(burst 法)</h2>
 <h3>3.1 制造方式</h3>
 <p>一次性齐发 bp 条等长随机 token 请求,约束 <code>bp × tok ≤ max_num_batched_tokens</code> ⇒ 整个 burst 落在
