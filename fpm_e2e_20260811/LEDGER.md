@@ -396,3 +396,22 @@ diff came from upstream main's own commits, already merged earlier).
    **Fix for modeling-dev**: bracket endpoint sub-queries inherit curve-end
    util-hold (the guard's purpose — no silent k-NN fallback — is preserved for
    exact-site sub-queries). One-line semantics change + a floor-query test.
+
+## Prefill bs-extrapolation scored on mined real traffic (2026-08-12)
+
+84 bp>4 steps mined from stream_stack1_full (deployment config, all-eager
+totals; eager pure-step parity previously validated). All are mixed steps,
+bp 5-17 (1.25-4.25x beyond collected B_c=4). New-model scoring:
+
+- excl. 2 stall outliers (656/2378ms vs ~103/139ms neighbors): n=82,
+  MAPE ~4.3%, median 2.9%, P95 ~6.6%, MAX +42.8% @ (bp=8, tp=3601, bd=32);
+- by multiple: 3.75-4.25x (bp 15-17, GEMM-dominated 7.7-8.2k totals)
+  = +1.0~+6.1% — the clamp holds even at 4x;
+- **finding: clamp error scales with ATTENTION SHARE, not with the
+  extrapolation multiple** — bp=8 @ 3.6-4.1k totals reads +31~43% (same-total
+  shorter sequences cost quadratically less attention; compounded by the
+  eager-dip rows). Feed back to: L3 C-stratum design (mid-total × high-bp is
+  the fragile cell) and modeling-dev (document the applicability domain, or
+  correct the attention term by per-request length ratio — NOT a constant);
+- caveat: 30 steps' marginal refused by the floor-query bug (counted as 0,
+  model low by ~2-4%); rescore after the one-line fix.
