@@ -296,3 +296,38 @@ pad-up staircase (b=12 +19.2%, b=20 +17.2% — optional snap semantics skipped b
 design), giant-KV/oscillation pockets (b=36@1.68M +28.4%, b=64@3.15M +21.0%,
 b=40@5.38M +15.8%, b=64@5.38M +14.9% — real jagged engine behavior per decomp
 probes; collector QA + lattice work).
+
+## Strict three-phase validation of the landed #1461 formula (2026-08-12)
+
+Method notes (all trips found and closed): steady-state design points only
+(tp==chunk AND bd==bd_nom; ramp/drain full-prefill steps excluded); ground
+truth restricted to the cap2048 engine section (engine restart at stream line
+141390 — the cumulative stream mixes configs before that); sweep wall-time
+semantics validated against sync probes via pure-prefill parity
+(2048: 46.76 vs 46.25 = +1.1%; 8192: 153.2 vs 150.2 = +2.1% — no async
+discount, graphs active).
+
+| phase | strict check | verdict |
+|---|---|---|
+| prefill | 62 probe points: post-#1461 references bitwise identical to pre-fix (max drift 0.00e+00); all off-grid single-digit | **PASS** |
+| decode | 102 graph-side points bitwise identical; 4 eager-side points changed by design (+97/+51/+164/+94% → -10.6/-5.7/-2.6/+0.7%); MAPE gates met (3.93% / 5.64% excl. poisoned) | **PASS** |
+| mixed | 375 steady steps, 24 windows (`mixed_validation_v3_steady.csv`): regime catastrophe healed (c2048 rows -39~-46% → +16~+25%, right side of the cliff) but gates FAIL: grid median\|δ\| 13.22% (gate ≤8%), boundary rows +16~+25% (gate ±15%) | **REGIME FIX VERIFIED; GATES FAIL — matches SPEC's predicted "coordinate-fix-only" stage (13.7%)** |
+
+Mixed residual fully decomposed (component split per window):
+
+1. **Graph-side windows (c256-c1024): overshoot ≈ the marginal term exactly**
+   (over-marginal residue ±1-2ms ≈ 0). Real graph-side mixed steps cost ≈ the
+   pure-prefill row at (chunk+Bd) ALONE — the decode KV-read marginal is
+   absorbed into the padded graph replay. The `+ max(0, dec-base)` term
+   double-counts here (+8~15% relative).
+2. **Eager-side windows (c2048-c6144): the prefill component itself overprices
+   by +6~15ms** (real mixed eager ≈ 0.86-0.88 × pure-row at same totals).
+   Interacts with the eager-lattice dip (collector densification pending) plus
+   a genuine mixed-vs-pure eager gap (mixed avoids the ragged post-cliff
+   attention shape).
+
+Follow-up owners: formula — graph-side marginal suppression (regime-aware:
+marginal only when the step is eager? needs a discriminating experiment);
+collector — eager densification (already assigned); the 0.86-0.88 eager
+factor must NOT ship as a constant (single-model/single-HW; same doctrine as
+the rejected 1.145).
