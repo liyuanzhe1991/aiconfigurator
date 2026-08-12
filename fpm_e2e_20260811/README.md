@@ -10,6 +10,7 @@
 | `REPORT.md` / `REPORT.html` | **先读这个**:环境准备 → 五阶段流程(命令+结果)→ 验证方法与统计 → 待决事项 |
 | `LEDGER.md` | 战役总账:来源钉板、每一笔预测-实测-归因、mixed 网格、根因判定、**Restart handoff(重启序列)** |
 | `HANDOVER_MODELING.md` | **modeling session 从这里开始**:任务 A(mixed 公式)+ 任务 B(decode 批轴 regime 分区)执行书,含验收门与禁改清单 |
+| `HANDOVER_BATCH_SEGMENT.md` | 批轴"段内括住"收尾改造(退役 k-NN)执行书,验收 oracle = `bracket_expected.csv` |
 | `MIXED_FORMULA_SPEC.md` | 公式推导全文 + 机制论证(交接书的依据) |
 
 ## 数据(全部可复算)
