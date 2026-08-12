@@ -42,6 +42,29 @@
 3. 多 chunk 逐个求和替代摊薄(SPEC §2.3);边界情形 SPEC §2.4。
 4. Python 与 Rust 同一轮改完,parity 测试锁住。
 
+### 修改方法(代码级,锚点为当前分支行号)
+
+`query()`(fpm_forward.py L650)已经是"组坐标 → `_resolve`(L623 域门+插值)"
+两段式,query_totals 只是跳过组坐标那步:
+
+```python
+def query_totals(self, database, *, batch_size: int,
+                 total_prefill_tokens: int = 0,
+                 total_kv_read_tokens: int = 0) -> PerformanceResult:
+    batch_size = int(batch_size)
+    if batch_size < 1 or total_prefill_tokens < 0 or total_kv_read_tokens < 0:
+        raise ValueError(...)
+    cell = self._load_cell(database)
+    coords = ((batch_size, int(total_prefill_tokens), int(total_kv_read_tokens))
+              if self._phase == "prefill" else (batch_size, int(total_kv_read_tokens)))
+    return self._resolve(cell, coords, database)   # 域门/不外推语义原样继承
+```
+
+`base_backend.py` 改点:唯一调用点 L1147 一带(守卫 `forward_model == "fpm"`
+在 L1140),按 SPEC §2.2/§2.3 替换 prefill 分量与多 chunk 求和;decode 边际项
+(`query - query_pass_baseline`)不动。Rust:`operators/fpm_forward.rs` 加同名
+入口(它同样有 resolve 两段式),engine runtime 混合步路径同步换坐标。
+
 验收:`mixed_validation_v2_cap2048.csv` 复放,跨界行(chunk=2048)从 -38~-44% 收到
 ±15%;新 parquet 全网格 median|δ| ≤ 8%(离线预演已达 5.4%,你只需复现)。
 
@@ -72,6 +95,45 @@
 5. (可选,收益小)graph 段内 pad-up 阶梯语义:snap 到下一 capture 批次行值。
    注意它**不是保守上界**(实测 live(12)=11.32 > live(16)=10.12),做不做都行,
    做了把 off-capture 批次从 -21% 收到约 -11%(仍在路由带内)。
+
+### 修改方法(代码级锚点)
+
+decode 表在 `load_fpm_forward_data`(fpm_forward.py L356 一带,
+`table.setdefault(batch, {})[total_kv] = latency`)组装,cell 结构为
+`cell["tables"][phase]` + `cell["domains"][phase]`。改三处:
+
+```python
+# 1) load 阶段(表组装完、进 _data_cache 前——保住 immutable-after-load 契约):
+def _detect_decode_regime_boundary(table) -> int | None:
+    batches = sorted(table)
+    hits = []
+    for b in batches:
+        if b + 1 not in table: continue
+        ratios = [table[b+1][kv] / _curve_interp(table[b], kv)   # b 曲线上分段线性求值
+                  for kv in table[b+1] if _covers(table[b], kv)]
+        if len(ratios) >= 3 and statistics.median(ratios) >= 2.0:
+            hits.append(b)
+    if len(hits) > 1: raise PerfDataNotAvailableError("ambiguous decode regime cliffs: %s" % hits)
+    return hits[0] if hits else None
+
+bstar = _detect_decode_regime_boundary(dec_table)
+cell["decode_regime_boundary"] = bstar
+if bstar is not None:   # 两个新 dict = 两个新 id(data),站点索引缓存天然不串
+    cell["tables"]["decode_graph"] = {b: c for b, c in dec_table.items() if b <= bstar}
+    cell["tables"]["decode_eager"] = {b: c for b, c in dec_table.items() if b > bstar}
+
+# 2) _resolve(L623)选表处(域门仍用全量 decode domain,先门后路由):
+table = cell["tables"][self._phase]
+if self._phase == "decode" and cell.get("decode_regime_boundary") is not None:
+    key = "decode_graph" if coords[0] <= cell["decode_regime_boundary"] else "decode_eager"
+    table = cell["tables"][key]
+
+# 3) query()/query_pass_baseline() 不改——它们只组坐标,路由在 _resolve 统一生效。
+```
+
+悬崖缺失(`bstar is None`,如未来某模型没采 eager 点)→ 不切表,行为与今天
+完全一致。Rust 侧:loader 在 `perf_database` 模块组装 FPM 表处同构切表,
+`operators/fpm_forward.rs` 的 resolve 同构路由。
 
 ### 为什么边界能从数据来、不需要 inference 传参
 
