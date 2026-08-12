@@ -180,3 +180,17 @@ v2 离网探针(randtok2 数据,decode 配置对齐,TEP4)实测:
 
 边界情形:悬崖对缺失 → eager 区 = 域外,FPM 不外推,行为不变;
 过渡行污染不影响 ≥2× 跳变检测。
+
+### §5 增补 3:实现边界(回应"插值器是共享的")
+
+核查:op-level 算子(gemm/moe/attention/mla…)全部用 `Grid()`;`ScatteredSites`
+目前仅 fpm_forward.py 使用。但无论共用与否,**`perf_interp/engine.py` 一行不改**
+——共享插值引擎不得引入 cudagraph 领域逻辑:
+
+- regime 分区在 **FPM op 层建表时**完成:fpm_forward.py 把 decode 数据字典切成
+  graph(b ≤ B*)/eager(b > B*)两张子表,查询按同规则路由;每张子表交给
+  原封不动的 ScatteredSites。引擎只看到两份普通数据。
+- Rust 同构:operators/fpm_forward.rs 同样在 op 层切表,parity 测试锁定。
+- prefill token 轴无需任何切表:悬崖对 (2048,2049) 是曲线轴相邻整数,之间不存在
+  可查询的整数点,数学上不可能桥接——病只在批轴(站点稀疏、崖间有大量整数)。
+- op-level 预测因此不受任何影响(Grid 路径零接触;ScatteredSites 语义零变化)。
