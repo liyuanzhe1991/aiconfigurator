@@ -126,3 +126,14 @@ randtok2 目前只活在冻结镜像的单文件层里。建议向 dynamo 提 PR
 | `probes_v2_scores.csv` | v2 探针全点位(prefill 对齐的最终证明) |
 | `probes_v2/pocket/pocket_b{1..7}.json` | 巨 KV 抽签七启动判别 |
 | `../scripts/experiments/README.md` Appendix B | 镜像谱系与规则 |
+
+## §6 补充(2026-08-12 多并行战役新发现):第 4 个待修问题
+
+4. **永久不可行 cell 阻塞整个计划的发布**:发布门是"计划内全 cell 通过"
+   (runner.py `all_passed and covers_full_plan`),而内存裁决无法证明不可行的
+   拓扑(如 M2.7 的 2 卡形状:估算器在 moe 整除性上报错 → 交运行时验证)在
+   真机上永久失败后,该计划永远无法发布——8 个通过 cell 的数据被 4 个
+   注定失败的 cell 扣为人质,只能收窄形状重跑(全部重采,GPU 时间翻倍)。
+   **修法**:运行时验证失败且分类为拓扑不可行的 cell 应落 `infeasible` 终态,
+   发布门接受 `passed ∪ infeasible` 覆盖全计划;或允许计划带审计记录地重冻结。
+   (归 collector;实测案例:fpm_forward_artifacts/4df9b0f29115c63d)

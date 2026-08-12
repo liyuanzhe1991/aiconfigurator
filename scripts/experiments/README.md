@@ -328,7 +328,7 @@ The collector exposes these knobs (edit them directly in the command):
 | Knob | Values | Meaning | Constraints |
 |---|---|---|---|
 | `--fpm-parallel-presets` | `tep`, `dep`, `pure_tp` (MoE); `tp` (dense) | which parallel families the planner enumerates — a space-separated **list** yields one plan covering all of them | `pure_tp` = tensor-parallel experts (`moe_tp` axis, experts sliced instead of distributed); it is capability-gated — models whose runtime capability does not declare it fail enumeration loudly. GLM-5.2 and MiniMax-M2.7 declare it |
-| `--fpm-tp-sizes` | e.g. `8`, `16` | tensor/expert-parallel width | **tep only** |
+| `--fpm-tp-sizes` | e.g. `8`, `16` | tensor/expert-parallel width | **tep 与 pure_tp**(tp 轴均在两者的轴集内;dep 用 `--fpm-dp-sizes`) |
 | `--fpm-dp-sizes` | e.g. `1`, `2` | data-parallel replicas | with `dep`, this is the sharding axis; with tep×16 keep `1` |
 | `--fpm-max-gpus` | total GPUs | upper bound for the plan | must equal tp×dp for a single pinned shape |
 
