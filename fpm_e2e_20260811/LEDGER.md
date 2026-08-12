@@ -331,3 +331,40 @@ marginal only when the step is eager? needs a discriminating experiment);
 collector — eager densification (already assigned); the 0.86-0.88 eager
 factor must NOT ship as a constant (single-model/single-HW; same doctrine as
 the rejected 1.145).
+
+## Giant-KV pocket root-cause (7-boot discriminator, 2026-08-12)
+
+Setup: 17-pt pocket manifest (flip coords × micro-offsets ±4-8k tokens +
+stable controls), one TEP8 decode-config pod, independent engine boots.
+Artifacts: `probes_v2/pocket/pocket_b{1..7}.json`, manifests
+`probe_pocket_tep8.json` / `probe_pocket_eager.json`.
+
+Exclusion chain (each step measured, not argued):
+
+1. **Measurement noise — excluded.** Controls repeat to 0.1-1.1% across all
+   7 boots ((64, 393k): 14.80-15.03 ms). Levels are discrete, not scatter.
+2. **flashinfer autotune — exonerated.** TP>1 disables its persistent cache
+   (kernel_warmup.py:150, every boot re-tunes per rank) — plausible suspect,
+   but boots 4-5 with `--kernel-config '{"enable_flashinfer_autotune":false}'`
+   flip among themselves (29-40% spans) and share the same level set as the
+   AT-on group. Neither necessary nor sufficient. (Attention backend is
+   FLASH_ATTN; autotune covers MoE/allreduce here.)
+3. **CUDA-graph capture state — prime suspect (not sole).** Eager giant-KV
+   points (b=600, no graph) hold to ≤4.4% across boots while graph-region
+   points span up to 40%; but (768, 5.38M) moved +12.7% across the same pair,
+   so a secondary runtime sensitivity on the eager side cannot be ruled out
+   at n=2. Verdict: capture-time state is the dominant amplifier of the
+   lottery; sole-cause claim NOT made.
+
+Phenomenology (binding for data consumers): at kv ≳ 3M and b ∈ {40..256},
+step latency lands on 2-3 discrete levels 15-40% apart; selection flips both
+across boots at identical shape and within a boot across ±4k-token
+micro-shapes; each boot+shape is internally stable.
+
+Resolution (owners):
+- collector: flagged giant-KV coordinates collected as multi-boot medians
+  (kills the single-boot lottery in the data; residual ±10-20% floor);
+- upstream vLLM: determinism report with this 7-boot table (FULL-graph
+  capture path first, FA split scheduling second);
+- modeling/docs: intrinsic floor documented; interpolation layer NOT at
+  fault in this region.
