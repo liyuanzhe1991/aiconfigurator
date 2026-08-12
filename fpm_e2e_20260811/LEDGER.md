@@ -368,3 +368,31 @@ Resolution (owners):
   capture path first, FA split scheduling second);
 - modeling/docs: intrinsic floor documented; interpolation layer NOT at
   fault in this region.
+
+## Acceptance replay — #1461 round 2 (bracket + prefill bs-clamp), 2026-08-12
+
+Merged d0c05790 (new commits a92c124d/3da949c7/7853bcae/78f04be3). Shared
+resolver untouched in the new range (the perf_interp.rs delta seen in the wide
+diff came from upstream main's own commits, already merged earlier).
+
+1. **Bracket implementation == oracle, exactly**: all 34 off-lattice decode
+   probe points match `bracket_expected.csv` to 0.00%; the other 134 points
+   (anchors, prefill, on-lattice) bitwise unchanged. The two handover-predicted
+   micro-regressions appeared as predicted ((12,733992) +0.6→+6.5%,
+   (36,1.68M) +28.4→+32%).
+2. **Prefill bs extrapolation semantics** (smoke): bp>B_c clamps to B_c at the
+   same totals (bp∈{6,8,16}@4096 → value(4,4096)=97.91ms); kv axis stays
+   hard-gated (1.44M refused). L3 C-stratum bursts will test the clamp
+   hypothesis against real ragged multi-prefill steps.
+3. **L3 headline (12,647-step rescore)**: median|δ| 8.83→8.79%, MAPE
+   8.79→8.77%, P95 13.14→12.07%. P95 point: decode (40, 342858) 12.1%;
+   MAX point: decode (1, 8191) 52.7% (single ramp outlier, meas 13.8ms).
+4. **NEW finding — floor-query refusal (524 mixed steps, 4.1% coverage loss)**:
+   `query_pass_baseline` at OFF-lattice bd queries kv=bd (s=1), below both
+   bracket rows' curve starts (curves begin at s=2) → refused under the
+   handover's "both-sides-uncovered = out of domain" guard. Own-site/k-NN
+   paths answer the same query via curve-end util-hold. The guard is stricter
+   than the engine's own end semantics and misfires on floor queries.
+   **Fix for modeling-dev**: bracket endpoint sub-queries inherit curve-end
+   util-hold (the guard's purpose — no silent k-NN fallback — is preserved for
+   exact-site sub-queries). One-line semantics change + a floor-query test.
