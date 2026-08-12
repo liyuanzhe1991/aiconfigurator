@@ -614,8 +614,10 @@ variants of the frozen dynamo build; the Step 4 commands pin them per cluster:
 | h100, h200 (**current**) | `gc-steady-randtok2-20260812` | = 16xfix + salt-paired randomized benchmark inputs (the all-zero `[0]*n` prompts collapsed MoE routing and biased the measurements; fix validated on the 2026-08-12 re-collection: prefill 128-8192 aligns with real traffic to ≤±1.6%). Digest `sha256:3067293d…` |
 | — (broken, do not use) | `gc-steady-randtok-20260812` | first randomization attempt; prefix seeding and consumer randomized independently → block-hash mismatch → every `total_kv_read_tokens>0` point fails `fake_prefix_cache_validation_failed`. Superseded by randtok2's salt-paired RNG |
 | h100, h200 (2026-08-11 campaign, superseded) | `gc-steady-16xfix-20260809` | x86 steady build + the 16-GPU multinode fix; its parquet carries the routing-collapse bias |
-| gb200 | `gc-steady-arm64-schedonly-20260810` | ARM64 build; carries the dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200) |
-| b200 | `d719cca-gc-steady-20260729` | the original frozen baseline (dynamo `d719cca`) |
+| gb200 (**current**) | `gc-steady-arm64-randtok2-20260812` | = arm64-schedonly + salt-paired randomized benchmark inputs. Digest `sha256:4561c6c8…`. Live prefix validation pending first GB200 smoke |
+| b200 (**current**) | `gc-steady-b200-randtok2-20260812` | = d719cca-gc-steady + salt-paired randomized benchmark inputs. Digest `sha256:b0535deb…`. Live prefix validation pending first B200 smoke |
+| gb200 (superseded) | `gc-steady-arm64-schedonly-20260810` | ARM64 build; dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200); all-zero input bias |
+| b200 (superseded) | `d719cca-gc-steady-20260729` | the original frozen baseline (dynamo `d719cca`); all-zero input bias |
 
 Rules:
 
