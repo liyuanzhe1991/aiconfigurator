@@ -21,7 +21,7 @@ consumes the **as-built** contract, not the planned one:
 | Point grid | collector-owned Halton/maximin, frozen holdout IDs | Dynamo PR11509 native self-benchmark owns the grid; runtime-admitted, no holdout set |
 | Repeats | 5 repeats, median, CV/quarantine | single sample per point (`dynamo_native_single_sample_v1`); DP max is baked into `latency_ms` |
 | Publication | candidate dir + human promotion | collector writes the formal pair directly (locked, atomic, conflict-fail merge) |
-| Sidecar | predictor ID, block size, per-axis min/max | schema v5: hashes, run identities, counts — **no predictor/domain fields** |
+| Sidecar | predictor ID, block size, per-axis min/max | schema v6: hashes, run identities, counts — **no predictor/domain fields** |
 | Backends | vllm/sglang/trtllm probes | vLLM only; `PP=1`, `CP=1` fixed; one backend policy `baseline_auto` |
 
 Consequences adopted in this plan:
@@ -60,6 +60,13 @@ total_prefill_tokens, total_kv_read_tokens, partition_policy`. Value column: `la
 Schema v6 replaced the former `backend_axis`/`backend_policy` label pair with the four
 explicit backend identity columns (`"auto"` = the engine decided; the `enable_*` columns
 are real booleans).
+
+The V1 consumer fails closed for vLLM requests that pin `moe_backend` or
+`attention_backend`, or enable EPLB. The collector can record those identities, but AIC's
+standard Task-to-generator path cannot yet reproduce the corresponding engine arguments;
+modeling them would price a different runtime than the generated deployment. Automatic
+backend selection with EPLB disabled remains supported. Structured end-to-end generator
+fields are required before the pinned identities can be enabled in modeling.
 
 This V1 location is exact-version-only and is NOT presented as an immutable contract: FPM
 data deliberately bypasses `_build_op_sources()` (which merges shapes from several
@@ -262,7 +269,11 @@ forced off, and `tests/unit/sdk/test_fpm_forward.py` (33 tests). D1 shipped as
 exact-model-path-only (the interim unique-path fallback was removed in review); D2 shipped as ScatteredSites (per-phase configs,
 one-line swap to Grid for the LOO bake-off); D3 shipped as zero-energy; D4 deferred to M2.
 The mixed step ships the marginal-decode composition (§M3), replacing the original plan's
-plain prefill+decode sum. M2 (Rust op + schema bump + parity) and real-data LOO
+plain prefill+decode sum; its prefill component prices the iteration's REAL scheduled
+totals (chunk + decode tokens, per chunk) via ``query_totals``, so the CUDA-graph/eager
+regime encoded in the collected rows is addressed at the correct coordinate (the
+2026-08-11 e2e campaign measured -38%..-44% on capture-boundary rows under the earlier
+ISL-row/chunk-count averaging). M2 (Rust op + schema bump + parity) and real-data LOO
 qualification remain.
 
 ## 5. Open decisions (need owner sign-off before implementation)
