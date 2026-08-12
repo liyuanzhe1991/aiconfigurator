@@ -1,0 +1,36 @@
+{
+ "schema_version": 1,
+ "prefill": [
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 480,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 496,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 832,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 833,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 960,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 1280,
+   "total_kv_read_tokens": 131072
+  }
+ ],
+ "decode": []
+}

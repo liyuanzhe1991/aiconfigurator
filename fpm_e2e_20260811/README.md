@@ -27,8 +27,9 @@
 1. **根因**:benchmark 合成输入是 `[0]*n` → MoE 路由退化 → 采集数据小 M 偏快 / 大 M 偏慢;
    一行随机化修复使 prefill 128-8192 对齐真实流量 ≤±1.5%(判别实验实测)。
 2. **新采集镜像**:`nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok2-20260812`。
-3. **插值层达标**(1.3-2.5% ≈ 噪声地板);**mixed 需公式改造**(见 SPEC);
-   **decode 余 -5~-8% 路由分布带**(dense 对照待做)。
+3. **插值层达标**(v2 扩充探针,randtok2 数据:prefill 离网中位 1.1-2.8%,
+   decode 离网中位 3.3-4.2%);**mixed 与 decode 批轴需公式改造**(见 SPEC §2/§5);
+   **decode 余 -5~-9% 路由分布带**(dense 对照待做);3 条巨 KV 采集坏行待 QA 门。
 
 复现脚本:`level0_closure.py`、`probe_analysis.py`、`per_step_validation.py`、
 `make_probe_manifest.py`、`decode_sweep.sh`、`prefill_sweep.sh`、`mixed_sweep*.sh`、

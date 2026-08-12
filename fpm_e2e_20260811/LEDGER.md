@@ -220,3 +220,57 @@ off-grid MAPE 7.14% — but the structure decomposes exactly:
 TEP4 probe pods deleted after harvest; namespace `yuanli-aic` verified empty.
 TEP8 probes pending full-node capacity (6/8 H200 nodes held by a neighbor
 tenant's 8-GPU jobs; capacity watch armed).
+
+## v2 probes — TEP8 + decomposition rounds (final, 2026-08-12)
+
+Final probe stats (all config-matched, randtok2 engine + parquet):
+
+| set | anchors MAPE | off-grid MAPE (median) | noise floor |
+|---|---|---|---|
+| TEP4 decode ×3 | 3.85% | 7.14% (3.31%) | 1.21% |
+| TEP4 prefill ×2 | 1.45% | 2.57% (1.09%) | 0.26% |
+| TEP8 decode ×2 | 2.70% | 14.28% (4.17%) | 1.03% |
+| TEP8 prefill ×2 | 2.03% | 3.61% (2.82%) | 0.94% |
+
+Decode tails are fully attributed (below); prefill is single-digit everywhere.
+
+### Data-quality scan + decomposition verdicts
+
+Whole-parquet monotonicity scan: 14 decode + 50 prefill non-monotonic row
+pairs. Decomposition probes split them into TWO distinct classes:
+
+1. **Corrupt rows (collection failures, must be caught by QA)** — physically
+   impossible values, live truth measured on fresh engines:
+   - tp8 (256, 6,557,530): row 11.22 ms → live **57.46** (-80% wrong)
+   - tp8 (481, 2,097,152): row 12.35 ms → live **39.77**
+   - tp8 (496, 1,048,576): row 17.29 ms → live **30.97**
+   - tp4 (256, 4,096): row 24.72 → live 20.88 (3-rep, +18% wrong)
+   - tp4/tp8 (513, 65,536) eager-transition rows read +11~12% vs live plateau
+   All are giant-KV or regime-transition coordinates → **collector fix:
+   monotonicity/sanity gate + re-run policy for flagged cells**.
+2. **Real jagged engine behavior (rows faithful, smoothing is the error)** —
+   the tp8 b=1 kv=131072 prefix curve oscillates between two kernel-plan
+   levels (segments flip at tok 385/416/480/496/576/640/705/833/960/1280/1409);
+   fresh-engine probes reproduce 5/6 rows within ±1.6% including the inverted
+   cliff (832→94.9 slow / 833→75.5 fast). Same phenomenon found on the decode
+   KV axis: (64, 3.15M) live 41.3 is a slow pocket while the surrounding curve
+   (2.1M→25.7, 3.67M→33.5, 4.19M→35.8) is healthy. Exact-hit queries are
+   correct; off-lattice interpolation inside a pocket carries ~±25% local
+   error. Not fixable by data; documented as an interpolation floor in
+   oscillation zones.
+
+### Cliff/pad decomposition (TEP8 confirms TEP4)
+
+- eager plateau flat at ~95-101 ms (513→101.1, 900→95.2 @ kv≈131k); batch-axis
+  bridging remains the dominant off-grid error (+95~164% at b=600/768).
+- pad-up staircase has counterexamples: live(12)=11.32 EXCEEDS live(16)=10.12
+  (tp8) — padded ragged batches can cost more than the pad target; ceil-step
+  semantics is an approximation, not an upper bound.
+
+### Round-2 close-out state
+
+- All four cells probed, TEP4+TEP8 pods deleted, namespace zero-residue.
+- Handoffs: MIXED_FORMULA_SPEC §5 (modeling PR: regime-aware batch axis);
+  collector QA gate + eager-lattice densification (2304/2560/3072/3584) +
+  giant-KV re-run policy (collector PR); dense-model routing control (qwen32b)
+  still the open discriminator for the -5~-9% band.

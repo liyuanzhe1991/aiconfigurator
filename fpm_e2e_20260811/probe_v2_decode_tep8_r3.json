@@ -1,0 +1,50 @@
+{
+ "schema_version": 1,
+ "prefill": [],
+ "decode": [
+  {
+   "batch_size": 16,
+   "total_kv_read_tokens": 8176
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3670016
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 4194304
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 4194280
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 6557440
+  },
+  {
+   "batch_size": 481,
+   "total_kv_read_tokens": 2097160
+  },
+  {
+   "batch_size": 496,
+   "total_kv_read_tokens": 1048544
+  },
+  {
+   "batch_size": 512,
+   "total_kv_read_tokens": 131072
+  },
+  {
+   "batch_size": 513,
+   "total_kv_read_tokens": 131328
+  },
+  {
+   "batch_size": 900,
+   "total_kv_read_tokens": 131400
+  }
+ ]
+}

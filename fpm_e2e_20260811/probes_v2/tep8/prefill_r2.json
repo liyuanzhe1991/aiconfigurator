@@ -1,0 +1,3330 @@
+{
+  "schema_version": 2,
+  "artifact_type": "rank",
+  "status": "complete",
+  "valid": true,
+  "usable": true,
+  "stop_reason": null,
+  "timing_valid": true,
+  "run_id": "9e04f25187104488aa31ce01dcc4d7e3",
+  "grid_digest": "822b4aaeaf105e5487c6196ec752b5aba46f2675d1cb14f21a36b2ba7c0288e2",
+  "timing": {
+    "started_at": "2026-08-12T00:10:13.465235Z",
+    "completed_at": "2026-08-12T00:10:18.585670Z",
+    "benchmark_elapsed_seconds": 5.120413774624467,
+    "measured_iteration_seconds": 2.969771720468998
+  },
+  "dp": {
+    "rank": 0,
+    "size": 1
+  },
+  "synchronization": {
+    "enabled": false,
+    "coordinator_rank": 0,
+    "port": null
+  },
+  "coverage": {
+    "expected_points": 31,
+    "completed_points": 31,
+    "skipped_points": 0
+  },
+  "config": {
+    "mode": "agg",
+    "warmup_iterations": 5,
+    "output_path": "/results/probe_v2_r2.json",
+    "timeout": 3600,
+    "prefill_max_new_token_samples": 64,
+    "prefill_max_kv_read_token_samples": 16,
+    "decode_max_kv_read_token_samples": 128,
+    "decode_max_batch_size_samples": 128,
+    "prefix_max_batch_size_samples": 3
+  },
+  "limits": {
+    "max_num_scheduled_tokens": 8192,
+    "max_num_running_reqs": 1024,
+    "max_model_len": 204800,
+    "block_size": 16,
+    "num_gpu_blocks": 406470,
+    "configured_max_batch_size": 1024,
+    "feasible_max_batch_size": 1024
+  },
+  "measurement_policy": {
+    "decode": "steady_state_second_step",
+    "prefill": "single_step"
+  },
+  "cudagraph": {
+    "mode": "FULL_AND_PIECEWISE",
+    "prefill_mode": "PIECEWISE",
+    "decode_mode": "FULL",
+    "max_capture_size": 2048,
+    "capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512,
+      544,
+      576,
+      608,
+      640,
+      672,
+      704,
+      736,
+      768,
+      800,
+      832,
+      864,
+      896,
+      928,
+      960,
+      992,
+      1024,
+      1056,
+      1088,
+      1120,
+      1152,
+      1184,
+      1216,
+      1248,
+      1280,
+      1312,
+      1344,
+      1376,
+      1408,
+      1440,
+      1472,
+      1504,
+      1536,
+      1568,
+      1600,
+      1632,
+      1664,
+      1696,
+      1728,
+      1760,
+      1792,
+      1824,
+      1856,
+      1888,
+      1920,
+      1952,
+      1984,
+      2016,
+      2048
+    ],
+    "prefill_capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512,
+      544,
+      576,
+      608,
+      640,
+      672,
+      704,
+      736,
+      768,
+      800,
+      832,
+      864,
+      896,
+      928,
+      960,
+      992,
+      1024,
+      1056,
+      1088,
+      1120,
+      1152,
+      1184,
+      1216,
+      1248,
+      1280,
+      1312,
+      1344,
+      1376,
+      1408,
+      1440,
+      1472,
+      1504,
+      1536,
+      1568,
+      1600,
+      1632,
+      1664,
+      1696,
+      1728,
+      1760,
+      1792,
+      1824,
+      1856,
+      1888,
+      1920,
+      1952,
+      1984,
+      2016,
+      2048
+    ],
+    "decode_capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512,
+      544,
+      576,
+      608,
+      640,
+      672,
+      704,
+      736,
+      768,
+      800,
+      832,
+      864,
+      896,
+      928,
+      960,
+      992,
+      1024
+    ]
+  },
+  "results": [
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 1,
+        "total_prefill_tokens": 1024,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1024,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 1,
+          "wall_time": 0.031227391213178635,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 1024,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 2,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 2,
+          "wall_time": 0.04581568017601967,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2048,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 3,
+        "total_prefill_tokens": 2049,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "post_capture",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 3,
+          "wall_time": 0.10196829959750175,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2049,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 4,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 4,
+          "wall_time": 0.09694749303162098,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4096,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 5,
+        "total_prefill_tokens": 8192,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "engine_limit"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 5,
+          "wall_time": 0.1491718515753746,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 8192,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 6,
+        "total_prefill_tokens": 2304,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 6,
+          "wall_time": 0.096104696393013,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2304,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 7,
+        "total_prefill_tokens": 2816,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 7,
+          "wall_time": 0.09593555331230164,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2816,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 8,
+        "total_prefill_tokens": 3328,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 8,
+          "wall_time": 0.0962123591452837,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 3328,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 9,
+        "total_prefill_tokens": 3840,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 9,
+          "wall_time": 0.09684830345213413,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 3840,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 10,
+        "total_prefill_tokens": 4352,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 10,
+          "wall_time": 0.09658764488995075,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4352,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 11,
+        "total_prefill_tokens": 4864,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 11,
+          "wall_time": 0.09602925181388855,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4864,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 12,
+        "total_prefill_tokens": 5376,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 12,
+          "wall_time": 0.10213837213814259,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 5376,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 13,
+        "total_prefill_tokens": 5888,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 13,
+          "wall_time": 0.11227186024188995,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 5888,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 14,
+        "total_prefill_tokens": 6400,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 14,
+          "wall_time": 0.12027147226035595,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 6400,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 15,
+        "total_prefill_tokens": 6912,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 15,
+          "wall_time": 0.12924951501190662,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 6912,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 16,
+        "total_prefill_tokens": 7424,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 16,
+          "wall_time": 0.13794426433742046,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 7424,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 17,
+        "total_prefill_tokens": 7936,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 17,
+          "wall_time": 0.14527993649244308,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 7936,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 18,
+        "total_prefill_tokens": 3328,
+        "total_kv_read_tokens": 0,
+        "batch_size": 2,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 18,
+          "wall_time": 0.09499621763825417,
+          "scheduled_requests": {
+            "num_prefill_requests": 2,
+            "sum_prefill_tokens": 3328,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 19,
+        "total_prefill_tokens": 1920,
+        "total_kv_read_tokens": 0,
+        "batch_size": 3,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1920,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 19,
+          "wall_time": 0.04389669559895992,
+          "scheduled_requests": {
+            "num_prefill_requests": 3,
+            "sum_prefill_tokens": 1920,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 20,
+        "total_prefill_tokens": 5376,
+        "total_kv_read_tokens": 0,
+        "batch_size": 3,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 20,
+          "wall_time": 0.10022095032036304,
+          "scheduled_requests": {
+            "num_prefill_requests": 3,
+            "sum_prefill_tokens": 5376,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 21,
+        "total_prefill_tokens": 2816,
+        "total_kv_read_tokens": 0,
+        "batch_size": 4,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 21,
+          "wall_time": 0.09527445957064629,
+          "scheduled_requests": {
+            "num_prefill_requests": 4,
+            "sum_prefill_tokens": 2816,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 22,
+        "total_prefill_tokens": 6400,
+        "total_kv_read_tokens": 0,
+        "batch_size": 4,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 22,
+          "wall_time": 0.11606133170425892,
+          "scheduled_requests": {
+            "num_prefill_requests": 4,
+            "sum_prefill_tokens": 6400,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 23,
+        "total_prefill_tokens": 1312,
+        "total_kv_read_tokens": 128,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1312,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 23,
+          "wall_time": 0.035911811515688896,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 1312,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 128,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 24,
+        "total_prefill_tokens": 512,
+        "total_kv_read_tokens": 2048,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 512,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 24,
+          "wall_time": 0.02381342090666294,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 512,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 2048,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 25,
+        "total_prefill_tokens": 184,
+        "total_kv_read_tokens": 32768,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 184,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 25,
+          "wall_time": 0.024517059326171875,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 184,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 32768,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 26,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 384,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 26,
+          "wall_time": 0.04667150042951107,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2048,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 384,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 27,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 6144,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 27,
+          "wall_time": 0.052313368767499924,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2048,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 6144,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 28,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 98304,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 28,
+          "wall_time": 0.14076133631169796,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 2048,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 98304,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 29,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 384,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 29,
+          "wall_time": 0.09698018617928028,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4096,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 384,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 30,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 6144,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 30,
+          "wall_time": 0.0970459133386612,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4096,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 6144,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 31,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 98304,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896814363321616",
+          "dp_rank": 0,
+          "counter_id": 31,
+          "wall_time": 0.2513035237789154,
+          "scheduled_requests": {
+            "num_prefill_requests": 1,
+            "sum_prefill_tokens": 4096,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 98304,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "iteration_groups": [
+    {
+      "benchmark_id": 1,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 1,
+        "total_prefill_tokens": 1024,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1024,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.031227391213178635,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 1,
+              "wall_time": 0.031227391213178635,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 1024,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 2,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 2,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04581568017601967,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 2,
+              "wall_time": 0.04581568017601967,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2048,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 3,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 3,
+        "total_prefill_tokens": 2049,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "post_capture",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.10196829959750175,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 3,
+              "wall_time": 0.10196829959750175,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2049,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 4,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 4,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09694749303162098,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 4,
+              "wall_time": 0.09694749303162098,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4096,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 5,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 5,
+        "total_prefill_tokens": 8192,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "engine_limit"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.1491718515753746,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 5,
+              "wall_time": 0.1491718515753746,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 8192,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 6,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 6,
+        "total_prefill_tokens": 2304,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.096104696393013,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 6,
+              "wall_time": 0.096104696393013,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2304,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 7,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 7,
+        "total_prefill_tokens": 2816,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09593555331230164,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 7,
+              "wall_time": 0.09593555331230164,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2816,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 8,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 8,
+        "total_prefill_tokens": 3328,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.0962123591452837,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 8,
+              "wall_time": 0.0962123591452837,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 3328,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 9,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 9,
+        "total_prefill_tokens": 3840,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09684830345213413,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 9,
+              "wall_time": 0.09684830345213413,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 3840,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 10,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 10,
+        "total_prefill_tokens": 4352,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09658764488995075,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 10,
+              "wall_time": 0.09658764488995075,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4352,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 11,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 11,
+        "total_prefill_tokens": 4864,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09602925181388855,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 11,
+              "wall_time": 0.09602925181388855,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4864,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 12,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 12,
+        "total_prefill_tokens": 5376,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.10213837213814259,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 12,
+              "wall_time": 0.10213837213814259,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 5376,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 13,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 13,
+        "total_prefill_tokens": 5888,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.11227186024188995,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 13,
+              "wall_time": 0.11227186024188995,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 5888,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 14,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 14,
+        "total_prefill_tokens": 6400,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.12027147226035595,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 14,
+              "wall_time": 0.12027147226035595,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 6400,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 15,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 15,
+        "total_prefill_tokens": 6912,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.12924951501190662,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 15,
+              "wall_time": 0.12924951501190662,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 6912,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 16,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 16,
+        "total_prefill_tokens": 7424,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.13794426433742046,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 16,
+              "wall_time": 0.13794426433742046,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 7424,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 17,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 17,
+        "total_prefill_tokens": 7936,
+        "total_kv_read_tokens": 0,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.14527993649244308,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 17,
+              "wall_time": 0.14527993649244308,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 7936,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 18,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 18,
+        "total_prefill_tokens": 3328,
+        "total_kv_read_tokens": 0,
+        "batch_size": 2,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09499621763825417,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 18,
+              "wall_time": 0.09499621763825417,
+              "scheduled_requests": {
+                "num_prefill_requests": 2,
+                "sum_prefill_tokens": 3328,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 19,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 19,
+        "total_prefill_tokens": 1920,
+        "total_kv_read_tokens": 0,
+        "batch_size": 3,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1920,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04389669559895992,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 19,
+              "wall_time": 0.04389669559895992,
+              "scheduled_requests": {
+                "num_prefill_requests": 3,
+                "sum_prefill_tokens": 1920,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 20,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 20,
+        "total_prefill_tokens": 5376,
+        "total_kv_read_tokens": 0,
+        "batch_size": 3,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.10022095032036304,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 20,
+              "wall_time": 0.10022095032036304,
+              "scheduled_requests": {
+                "num_prefill_requests": 3,
+                "sum_prefill_tokens": 5376,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 21,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 21,
+        "total_prefill_tokens": 2816,
+        "total_kv_read_tokens": 0,
+        "batch_size": 4,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09527445957064629,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 21,
+              "wall_time": 0.09527445957064629,
+              "scheduled_requests": {
+                "num_prefill_requests": 4,
+                "sum_prefill_tokens": 2816,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 22,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 22,
+        "total_prefill_tokens": 6400,
+        "total_kv_read_tokens": 0,
+        "batch_size": 4,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.11606133170425892,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 22,
+              "wall_time": 0.11606133170425892,
+              "scheduled_requests": {
+                "num_prefill_requests": 4,
+                "sum_prefill_tokens": 6400,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 23,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 23,
+        "total_prefill_tokens": 1312,
+        "total_kv_read_tokens": 128,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 1312,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.035911811515688896,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 23,
+              "wall_time": 0.035911811515688896,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 1312,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 128,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 24,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 24,
+        "total_prefill_tokens": 512,
+        "total_kv_read_tokens": 2048,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 512,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.02381342090666294,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 24,
+              "wall_time": 0.02381342090666294,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 512,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 2048,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 25,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 25,
+        "total_prefill_tokens": 184,
+        "total_kv_read_tokens": 32768,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 184,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.024517059326171875,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 25,
+              "wall_time": 0.024517059326171875,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 184,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 32768,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 26,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 26,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 384,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04667150042951107,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 26,
+              "wall_time": 0.04667150042951107,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2048,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 384,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 27,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 27,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 6144,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.052313368767499924,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 27,
+              "wall_time": 0.052313368767499924,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2048,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 6144,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 28,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 28,
+        "total_prefill_tokens": 2048,
+        "total_kv_read_tokens": 98304,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "PIECEWISE",
+        "expected_capture_size": 2048,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.14076133631169796,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 28,
+              "wall_time": 0.14076133631169796,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 2048,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 98304,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 29,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 29,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 384,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.09698018617928028,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 29,
+              "wall_time": 0.09698018617928028,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4096,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 384,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 30,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 30,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 6144,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.0970459133386612,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 30,
+              "wall_time": 0.0970459133386612,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4096,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 6144,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 31,
+      "point": {
+        "point_type": "prefill",
+        "benchmark_id": 31,
+        "total_prefill_tokens": 4096,
+        "total_kv_read_tokens": 98304,
+        "batch_size": 1,
+        "expected_cudagraph_mode": "NONE",
+        "expected_capture_size": null,
+        "padding_tokens": null,
+        "sample_reasons": [
+          "explicit",
+          "eager_tail",
+          "geometric_tail"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.2513035237789154,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896814363321616",
+              "dp_rank": 0,
+              "counter_id": 31,
+              "wall_time": 0.2513035237789154,
+              "scheduled_requests": {
+                "num_prefill_requests": 1,
+                "sum_prefill_tokens": 4096,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 98304,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "skipped_points": [],
+  "missing_phases": [],
+  "error": null
+}
