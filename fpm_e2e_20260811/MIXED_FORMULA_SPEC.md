@@ -183,9 +183,12 @@ v2 离网探针(randtok2 数据,decode 配置对齐,TEP4)实测:
 
 ### §5 增补 3:实现边界(回应"插值器是共享的")
 
-核查:op-level 算子(gemm/moe/attention/mla…)全部用 `Grid()`;`ScatteredSites`
-目前仅 fpm_forward.py 使用。但无论共用与否,**`perf_interp/engine.py` 一行不改**
-——共享插值引擎不得引入 cudagraph 领域逻辑:
+核查(两侧不同,勿混):Python 的 op-level 算子(gemm/moe/attention/mla…)全部用
+`Grid()`,`ScatteredSites` 仅 fpm_forward.py 使用;**但 Rust 侧
+`perf_database/gemm.rs:463` 的 GEMM raw 表就在用 `Resolver::ScatteredSites`**,
+与 fpm_forward.rs 共用同一实现。因此"op-level 零影响"的保证只能来自
+**不改共享代码本身**(Python `perf_interp/engine.py` 与 Rust
+`perf_database/perf_interp.rs` 的 resolver 一行不改),不是"没人共用":
 
 - regime 分区在 **FPM op 层建表时**完成:fpm_forward.py 把 decode 数据字典切成
   graph(b ≤ B*)/eager(b > B*)两张子表,查询按同规则路由;每张子表交给

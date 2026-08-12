@@ -1,0 +1,133 @@
+# Modeling Session 交接书 — FPM regime 感知改造(2026-08-12)
+
+执行本书即可,不需要读完整战役档案;需要证据时按文末索引取。
+详细公式推导在 `MIXED_FORMULA_SPEC.md`(本书是它的执行版,冲突时以本书为准)。
+
+## 0. 你在哪、改什么、不改什么
+
+- 分支:`fpm-all-20260811`(#1473/#1474/#1475/#1461 已合入)。目标:跟进 #1461(fpm-modeling-rust)。
+- **只改**:`aic-core/src/aiconfigurator_core/sdk/`(operations/fpm_forward.py、backends/base_backend.py)
+  与 `aic-core/rust/aiconfigurator-core/`(operators/fpm_forward.rs 及 engine runtime 混合步路径)。
+- **禁改**:Python `sdk/perf_interp/engine.py` **与 Rust
+  `perf_database/perf_interp.rs` 的 resolver 实现**(共享插值引擎一行不动——注意
+  Rust 侧 GEMM raw 表在 `perf_database/gemm.rs:463` 就用着 `Resolver::ScatteredSites`,
+  改 resolver = 动 op-level 预测);`collector/**`;`src/aiconfigurator/generator/**`;
+  数据 schema(sidecar v7 是 collector PR 的活)。模块边界规则见
+  `.claude/rules/repo-guide.md`,review 也按它执行。
+- 数据:`fpm_formal_database_randtok/h200_sxm/vllm/0.25.1/`(22,217 行,schema v6,
+  randtok2 镜像重采,已 staged 进 `aic-core/src/aiconfigurator_core/systems/data/`)。
+  L0 闭环位精确(13,281 点 0 误差),数据可信;已知 3 条坏行见 §4 注意事项。
+
+## 1. 任务 A — 混合步公式:按"本步调度总 token"定价
+
+现状缺陷与新公式全文见 SPEC §1-§2。要点:
+
+1. 新接口 `FPMForwardOp.query_totals(db, batch_size, total_prefill_tokens,
+   total_kv_read_tokens)`——直通总量坐标,绕过 per-request 整除约束(SPEC §2.1);
+2. `_get_fpm_mix_step_latency` 的 prefill 分量改为
+   `query_totals(1, ctx_tokens + gen_tokens, chunk_past_kv)`(SPEC §2.2,含无重复计费论证);
+3. 多 chunk 逐个求和替代摊薄(SPEC §2.3);边界情形 SPEC §2.4。
+4. Python 与 Rust 同一轮改完,parity 测试锁住。
+
+验收:`mixed_validation_v2_cap2048.csv` 复放,跨界行(chunk=2048)从 -38~-44% 收到
+±15%;新 parquet 全网格 median|δ| ≤ 8%(离线预演已达 5.4%,你只需复现)。
+
+## 2. 任务 B — decode 批轴 regime 分区(新,机制已钉死)
+
+### 病灶(数值复现分毫不差,勿再猜)
+
+`perf_interp` ScatteredSites 对未采集 batch 做 nn_sites=4 的 k-NN util 迁移,
+距离 = |log2(b_site/b_query)|,权重 1/d²。距离度量对 CUDA graph regime 全盲:
+查 b=600(kv=65400, tp4)时邻居是 {513(eager,98.7ms), 512(graph,36.3), 497(36.9),
+496(35.5)} —— 1 张 eager 票被 3 张 graph 票稀释,调和混合 = 44.37ms(op.query
+实际返回值),真值 88.2ms。b=1024 距离 0.77 octave 排第 5,进不了邻居集。
+实测危害:b=600 +97%、b=768 +51~95%、b=900 +12%(tp4/tp8 同构)。
+
+### 修法(全部在 FPM op 层,引擎零接触)
+
+在 `fpm_forward.py` **建表时**把每张 decode 表(per cell×phase)切成两张子表:
+
+1. **边界检测(数据驱动,v6 数据即用)**:对相邻采集批次对 (b, b+1),在重叠 KV
+   坐标上比较曲线值;中位 ratio ≥ 2 判为 regime 悬崖(实测 512/513 跳变 2.6-3.5×;
+   pad-up 对 (8,9)(16,17)… 只有 5-15%,阈值 2× 干净分离)。要求跳变在 ≥3 个 KV 点
+   上成立(抗坏行);期望恰好一个悬崖,检出多个 → 报错留人工。B* = 悬崖左值(512)。
+2. **切表**:graph 子表 = {b ≤ B*},eager 子表 = {b > B*}(本数据 = {513, 1024})。
+3. **路由**:query b ≤ B* → graph 子表;b > B* → eager 子表。每张子表交给
+   **原封不动**的 ScatteredSites。b > 1024 的 scale-up frontier 语义在 eager
+   子表内自然保留。
+4. Rust 同构(op 层切表 + 路由),parity 锁定。
+5. (可选,收益小)graph 段内 pad-up 阶梯语义:snap 到下一 capture 批次行值。
+   注意它**不是保守上界**(实测 live(12)=11.32 > live(16)=10.12),做不做都行,
+   做了把 off-capture 批次从 -21% 收到约 -11%(仍在路由带内)。
+
+### 为什么边界能从数据来、不需要 inference 传参
+
+capture 面本来就烙在每一行数据里(FPM 配置一致性教义:部署 == 采集),悬崖对
+(512,513) 是采集器特意留下的边界标记。sidecar 记录 capture 列表是 collector PR
+的 schema v7 项,落地后"sidecar 为准、数据推导作校验",校验不一致 = 配置漂移
+直接报错。你这轮只做数据驱动检测。
+
+### 验收(复放 harness 已就绪)
+
+```
+PYTHONPATH=aic-core/src .venv/bin/python fpm_e2e_20260811/probe_analysis_v2.py
+```
+
+对照 `probes_v2_scores.csv`(修前基线)。门限:
+
+| 点(decode 配置) | 实测 | 修前模型 | 修后要求 |
+|---|---|---|---|
+| tp4 b=600 kv=65400 | 88.21 | 44.37 (+98.8%) | \|δ\| ≤ 12%(eager 段内 k-NN 应给 ~95-98) |
+| tp4 b=768 kv=65280 | 89.90 | 57.70 (+55.8%) | \|δ\| ≤ 12% |
+| tp8 b=600 kv=130800 | 90.68 | 34.45 (+163%) | \|δ\| ≤ 12% |
+| tp8 b=768 kv=130560 | 94.33 | 48.29 (+95%) | \|δ\| ≤ 12% |
+| 全部 53×2 拓扑 decode 点 | — | MAPE 7.1/14.3% | **除坏行毒化点外** MAPE ≤ 6%,graph 侧点位回归零劣化(±1%) |
+
+单元测试:悬崖检测 fixture(含"多悬崖报错""跳变<2× 不切")、路由正确性、
+b>1024 frontier 保留、Rust parity。
+**op-level 回归门**:GEMM(Rust raw 表与 FPM 共用 `Resolver::ScatteredSites`)
+与全部 Grid 算子的既有测试/parity 套件必须零 diff 通过——这是"resolver 未被
+扰动"的机器证明,单独列在 PR 验证清单里。
+
+## 3. 对 prefill:**不要做同样的分区**(已论证,别过度工程)
+
+1. prefill 的 graph 悬崖在**曲线轴**(total_prefill_tokens,2048/2049),悬崖对是
+   相邻整数,之间不存在任何可查询的整数点——线性插值在数学上不可能跨崖桥接。
+   病只在 decode 的**站点轴**(批次稀疏,513 与 1024 之间有大量可查整数)。
+2. prefill 图是 PIECEWISE、按总 token 数 pad,**没有批轴悬崖**。探针证据:
+   b=2/3328 (-9.1%) 与 b=1/3328 (-10.4%) 偏差同源同幅(都是 token 轴格点缺口),
+   无批次效应。
+3. v2 探针 prefill 离网已是个位数(MAPE 2.6/3.6%,中位 1.1/2.8%)。剩余两个残差
+   都不归 modeling:eager 缺口(2304-3328 实测下凹 -9~-11%)是 **collector 格点
+   加密**的活(+2304/2560/3072/3584);振荡口袋(kernel-plan 形状敏感,实测可
+   复现非坏行)是文档化的插值地板,数据无法修。
+4. prefill 的 regime 正确性由任务 A 保证:mixed 用 chunk+Bd 总量查曲线后,
+   曲线自带的悬崖对自动把 regime 放对。
+
+## 4. 注意事项(会咬人的)
+
+- **3 条坏行还在数据里**(tp8 decode (256,6557530)=11.22 / (481,2097152)=12.35 /
+  (496,1048576)=17.29,真值 57.5/39.8/31.0;tp4 (256,4096) 偏高 +18%):QA 门是
+  collector PR 的活,你不清洗数据。但验收统计时**排除被它们毒化的点**
+  (`probes_v2_scores.csv` 里 tp8 (256, 5375744) 一点),并在 PR 描述里注明。
+- decode 全局有 -5~-9% 路由分布带(真实文本路由偏斜 vs benchmark 均匀随机;
+  dense 对照未做)。**不要**为它加任何常数补偿——它是数据层问题,留给后续。
+- `FPMForwardOp.clear_cache()` 会清 perf_interp 站点索引缓存;切表后确认缓存键
+  仍按 id(data) 正确失效(两张子表是两个 dict,天然不同 key,应无事,但测一下)。
+- 本地 CI 清单(过了再推):codeowners strict / import contract / public-api
+  contract / workspace doctests / DCO;Rust 侧 parity 套件(round-1 时 335 通过)。
+- 环境坑:cargo 在 `/opt/homebrew/opt/rustup/bin`(不在默认 PATH);Python 用
+  `.venv/bin/python` + `PYTHONPATH=aic-core/src`;仓库里可能有 stale native .so,
+  跑 parity 前 `uv sync` 重建。
+
+## 5. 证据索引(全部可复算)
+
+| 文件 | 内容 |
+|---|---|
+| `MIXED_FORMULA_SPEC.md` | 公式推导全文 + §5 机制/边界论证(本书的依据) |
+| `probes_v2_scores.csv` | 168 点修前基线(tp4/tp8 × decode/prefill,A/B 分组) |
+| `probes_v2/tep{4,8}/*.json` | 探针原始数据(decode ×3/×2 遍、prefill ×2 遍、解剖轮) |
+| `mixed_validation_v2_cap2048.csv` | 任务 A 验收网格(30 窗真实逐步) |
+| `per_step_validation.csv` | 12,647 真实步 vs 新 parquet 逐步对账 |
+| `LEDGER.md` | 战役总账(round-2 章:坏行判定、振荡判定、全部实测) |
+| `probe_analysis_v2.py` | 复放打分器(即验收 harness) |
