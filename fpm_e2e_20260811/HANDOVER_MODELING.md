@@ -18,6 +18,19 @@
   randtok2 镜像重采,已 staged 进 `aic-core/src/aiconfigurator_core/systems/data/`)。
   L0 闭环位精确(13,281 点 0 误差),数据可信;已知 3 条坏行见 §4 注意事项。
 
+### 0.5 影响面论证(op-level 为什么零影响——PR 描述可直接引用)
+
+插值引擎是纯函数 `query(cfg, data, *coords)`;影响 op-level 只有四条通道,逐条已验证切断:
+
+| 通道 | 事实 | 结论 |
+|---|---|---|
+| 共享代码 | engine.py / perf_interp.rs 一行不改 | 函数本体不变 |
+| 调用图 | `_get_fpm_mix_step_latency` 唯一调用点 base_backend.py:1147,被 `if model.forward_model == "fpm"`(L1140)守卫;`query_totals` 只挂在 FPMForwardOp 上 | op-level 控制流到不了改动 |
+| 数据 | 各算子自带 cfg+data 进纯函数;任务 B 只切 `load_fpm_forward_data` 产出的 FPM decode 字典,gemm/moe 表由各自 loader 装载 | op-level 的 (cfg, data, coords) 三者全不变 → 输出逐位不变(引用透明) |
+| 共享可变状态 | 仅站点索引 LRU(`_SITE_INDEX_CACHE`,上限 32,键 `id(data)`,immutable 契约见 engine.py L135-142)| 被挤占只损失一次 O(N) 重建,不可能产生错误数值;切表 = 新 dict = 新 id,无 stale-index 风险 |
+
+机器证明 = §2 的 op-level 回归门(测试全绿零 diff)。
+
 ## 1. 任务 A — 混合步公式:按"本步调度总 token"定价
 
 现状缺陷与新公式全文见 SPEC §1-§2。要点:
