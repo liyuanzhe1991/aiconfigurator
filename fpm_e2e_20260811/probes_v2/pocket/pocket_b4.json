@@ -1,0 +1,1842 @@
+{
+  "schema_version": 2,
+  "artifact_type": "rank",
+  "status": "complete",
+  "valid": true,
+  "usable": true,
+  "stop_reason": null,
+  "timing_valid": true,
+  "run_id": "e117c64401164d0fb313258f985a9459",
+  "grid_digest": "ebe475db135c93790909947e39561d3038771323a3d9d4419da48c21a4b03ba7",
+  "timing": {
+    "started_at": "2026-08-12T02:48:55.959435Z",
+    "completed_at": "2026-08-12T02:49:18.654545Z",
+    "benchmark_elapsed_seconds": 22.695085312006995,
+    "measured_iteration_seconds": 0.782411671243608
+  },
+  "dp": {
+    "rank": 0,
+    "size": 1
+  },
+  "synchronization": {
+    "enabled": false,
+    "coordinator_rank": 0,
+    "port": null
+  },
+  "coverage": {
+    "expected_points": 17,
+    "completed_points": 17,
+    "skipped_points": 0
+  },
+  "config": {
+    "mode": "agg",
+    "warmup_iterations": 5,
+    "output_path": "/results/pocket_b4.json",
+    "timeout": 3600,
+    "prefill_max_new_token_samples": 64,
+    "prefill_max_kv_read_token_samples": 16,
+    "decode_max_kv_read_token_samples": 128,
+    "decode_max_batch_size_samples": 128,
+    "prefix_max_batch_size_samples": 3
+  },
+  "limits": {
+    "max_num_scheduled_tokens": 8192,
+    "max_num_running_reqs": 1024,
+    "max_model_len": 204800,
+    "block_size": 16,
+    "num_gpu_blocks": 409947,
+    "configured_max_batch_size": 1024,
+    "feasible_max_batch_size": 1024
+  },
+  "measurement_policy": {
+    "decode": "steady_state_second_step",
+    "prefill": "single_step"
+  },
+  "cudagraph": {
+    "mode": "FULL_AND_PIECEWISE",
+    "prefill_mode": "PIECEWISE",
+    "decode_mode": "FULL",
+    "max_capture_size": 512,
+    "capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512
+    ],
+    "prefill_capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512
+    ],
+    "decode_capture_sizes": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64,
+      72,
+      80,
+      88,
+      96,
+      104,
+      112,
+      120,
+      128,
+      136,
+      144,
+      152,
+      160,
+      168,
+      176,
+      184,
+      192,
+      200,
+      208,
+      216,
+      224,
+      232,
+      240,
+      248,
+      256,
+      272,
+      288,
+      304,
+      320,
+      336,
+      352,
+      368,
+      384,
+      400,
+      416,
+      432,
+      448,
+      464,
+      480,
+      496,
+      512
+    ]
+  },
+  "results": [
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 1,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3137536,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 1,
+          "wall_time": 0.04212415893562138,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 3137536,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 2,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3141632,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 2,
+          "wall_time": 0.02925870195031166,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 3141632,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 3,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145728,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 3,
+          "wall_time": 0.038700554985553026,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 3145728,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 4,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3149824,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 4,
+          "wall_time": 0.03910307213664055,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 3149824,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 5,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3153920,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 5,
+          "wall_time": 0.03884369903244078,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 3153920,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 6,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5368256,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 6,
+          "wall_time": 0.06824286817573011,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 5368256,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 7,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5376448,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 7,
+          "wall_time": 0.04626330407336354,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 5376448,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 8,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5384640,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 8,
+          "wall_time": 0.049561063991859555,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 5384640,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 9,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5372480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 9,
+          "wall_time": 0.04273982695303857,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 40,
+            "sum_decode_kv_tokens": 5372480,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 10,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5376480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 10,
+          "wall_time": 0.049932820023968816,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 40,
+            "sum_decode_kv_tokens": 5376480,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 11,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5380480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 11,
+          "wall_time": 0.07183877797797322,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 40,
+            "sum_decode_kv_tokens": 5380480,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 12,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5371648,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 12,
+          "wall_time": 0.06067981198430061,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 256,
+            "sum_decode_kv_tokens": 5371648,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 13,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5375744,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 13,
+          "wall_time": 0.04843797511421144,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 256,
+            "sum_decode_kv_tokens": 5375744,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 14,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5379840,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 14,
+          "wall_time": 0.06538492999970913,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 256,
+            "sum_decode_kv_tokens": 5379840,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 15,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 393216,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 15,
+          "wall_time": 0.014800244010984898,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 64,
+            "sum_decode_kv_tokens": 393216,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 16,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145720,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 16,
+          "wall_time": 0.03985586785711348,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 40,
+            "sum_decode_kv_tokens": 3145720,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 17,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145728,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "fpms": [
+        {
+          "version": 1,
+          "worker_id": "7587896816644998698",
+          "dp_rank": 0,
+          "counter_id": 17,
+          "wall_time": 0.03664399404078722,
+          "scheduled_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "sum_prefill_kv_tokens": 0,
+            "num_decode_requests": 256,
+            "sum_decode_kv_tokens": 3145728,
+            "var_decode_kv_tokens": 0.0
+          },
+          "queued_requests": {
+            "num_prefill_requests": 0,
+            "sum_prefill_tokens": 0,
+            "var_prefill_length": 0.0,
+            "num_decode_requests": 0,
+            "sum_decode_kv_tokens": 0,
+            "var_decode_kv_tokens": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "iteration_groups": [
+    {
+      "benchmark_id": 1,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 1,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3137536,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04212415893562138,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 1,
+              "wall_time": 0.04212415893562138,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 3137536,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 2,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 2,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3141632,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.02925870195031166,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 2,
+              "wall_time": 0.02925870195031166,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 3141632,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 3,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 3,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145728,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.038700554985553026,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 3,
+              "wall_time": 0.038700554985553026,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 3145728,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 4,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 4,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3149824,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.03910307213664055,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 4,
+              "wall_time": 0.03910307213664055,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 3149824,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 5,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 5,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3153920,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.03884369903244078,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 5,
+              "wall_time": 0.03884369903244078,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 3153920,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 6,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 6,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5368256,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.06824286817573011,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 6,
+              "wall_time": 0.06824286817573011,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 5368256,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 7,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 7,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5376448,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04626330407336354,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 7,
+              "wall_time": 0.04626330407336354,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 5376448,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 8,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 8,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5384640,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.049561063991859555,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 8,
+              "wall_time": 0.049561063991859555,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 5384640,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 9,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 9,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5372480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04273982695303857,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 9,
+              "wall_time": 0.04273982695303857,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 40,
+                "sum_decode_kv_tokens": 5372480,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 10,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 10,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5376480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.049932820023968816,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 10,
+              "wall_time": 0.049932820023968816,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 40,
+                "sum_decode_kv_tokens": 5376480,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 11,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 11,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5380480,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.07183877797797322,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 11,
+              "wall_time": 0.07183877797797322,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 40,
+                "sum_decode_kv_tokens": 5380480,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 12,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 12,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5371648,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.06067981198430061,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 12,
+              "wall_time": 0.06067981198430061,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 256,
+                "sum_decode_kv_tokens": 5371648,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 13,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 13,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5375744,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.04843797511421144,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 13,
+              "wall_time": 0.04843797511421144,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 256,
+                "sum_decode_kv_tokens": 5375744,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 14,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 14,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 5379840,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.06538492999970913,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 14,
+              "wall_time": 0.06538492999970913,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 256,
+                "sum_decode_kv_tokens": 5379840,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 15,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 15,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 393216,
+        "batch_size": 64,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 64,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.014800244010984898,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 15,
+              "wall_time": 0.014800244010984898,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 64,
+                "sum_decode_kv_tokens": 393216,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 16,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 16,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145720,
+        "batch_size": 40,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 40,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.03985586785711348,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 16,
+              "wall_time": 0.03985586785711348,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 40,
+                "sum_decode_kv_tokens": 3145720,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "benchmark_id": 17,
+      "point": {
+        "point_type": "decode",
+        "benchmark_id": 17,
+        "total_prefill_tokens": 0,
+        "total_kv_read_tokens": 3145728,
+        "batch_size": 256,
+        "expected_cudagraph_mode": "FULL",
+        "expected_capture_size": 256,
+        "padding_tokens": 0,
+        "sample_reasons": [
+          "explicit",
+          "capture"
+        ]
+      },
+      "expected_dp_ranks": [
+        0
+      ],
+      "complete": true,
+      "wall_time": 0.03664399404078722,
+      "rank_results": [
+        {
+          "dp_rank": 0,
+          "fpms": [
+            {
+              "version": 1,
+              "worker_id": "7587896816644998698",
+              "dp_rank": 0,
+              "counter_id": 17,
+              "wall_time": 0.03664399404078722,
+              "scheduled_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "sum_prefill_kv_tokens": 0,
+                "num_decode_requests": 256,
+                "sum_decode_kv_tokens": 3145728,
+                "var_decode_kv_tokens": 0.0
+              },
+              "queued_requests": {
+                "num_prefill_requests": 0,
+                "sum_prefill_tokens": 0,
+                "var_prefill_length": 0.0,
+                "num_decode_requests": 0,
+                "sum_decode_kv_tokens": 0,
+                "var_decode_kv_tokens": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "skipped_points": [],
+  "missing_phases": [],
+  "error": null
+}

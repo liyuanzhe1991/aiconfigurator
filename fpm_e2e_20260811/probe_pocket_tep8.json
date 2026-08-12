@@ -1,0 +1,74 @@
+{
+ "schema_version": 1,
+ "prefill": [],
+ "decode": [
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3137536
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3141632
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3145728
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3149824
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 3153920
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 5368256
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 5376448
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 5384640
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 5372480
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 5376480
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 5380480
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 5371648
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 5375744
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 5379840
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 393216
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 3145720
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 3145728
+  }
+ ]
+}
