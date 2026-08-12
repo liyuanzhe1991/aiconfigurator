@@ -274,3 +274,25 @@ pairs. Decomposition probes split them into TWO distinct classes:
   collector QA gate + eager-lattice densification (2304/2560/3072/3584) +
   giant-KV re-run policy (collector PR); dense-model routing control (qwen32b)
   still the open discriminator for the -5~-9% band.
+
+## Acceptance replay — #1461 tasks A/B landed (2026-08-12)
+
+PR head c72bc9fa (mixed totals pricing 74de0ff6 + decode regime partition
+6dada527 + review follow-ups) merged into this branch (c2a243ff, one doc-wording
+conflict resolved ours). Hard constraint verified: `git diff` over the whole PR
+range touches NO perf_interp path (Python engine.py / Rust perf_interp.rs).
+
+probe_analysis_v2.py replay against the randtok2 parquet:
+
+| gate | requirement | result |
+|---|---|---|
+| cliff points | \|δ\| ≤ 12% | tp4 b600 **-10.6%** (was +97.2), tp4 b768 **-5.7%** (was +50.6), tp8 b600 **-2.6%** (was +163.2), tp8 b768 **+0.7%** (was +95.3) — PASS |
+| TEP4 decode off-grid MAPE | ≤ 6% | 7.14% → **3.93%** — PASS |
+| TEP8 decode off-grid MAPE (excl. bad-row-poisoned (256,5375744)) | ≤ 6% | 14.28% → **5.64%** — PASS |
+| on-grid / graph-side regression | zero drift | anchor stats bitwise identical pre/post — PASS |
+
+Remaining >12% tails (6 pts, all in documented classes, no action for #1461):
+pad-up staircase (b=12 +19.2%, b=20 +17.2% — optional snap semantics skipped by
+design), giant-KV/oscillation pockets (b=36@1.68M +28.4%, b=64@3.15M +21.0%,
+b=40@5.38M +15.8%, b=64@5.38M +14.9% — real jagged engine behavior per decomp
+probes; collector QA + lattice work).
