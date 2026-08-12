@@ -1,0 +1,37 @@
+{
+ "engine_facts": {
+  "budget": 8192,
+  "max_seqs": 1024,
+  "max_len": 204800,
+  "block": 16,
+  "prefill_capture": 2048,
+  "B_c": 4,
+  "decode_max_batch": 1024,
+  "kv_dom_max": 2375786,
+  "giant_kv_threshold": 950314
+ },
+ "prefill": {
+  "total": 188,
+  "A": 42,
+  "B": 45,
+  "长请求": 56,
+  "C": 45,
+  "past_kv_share": 0.805,
+  "A_share_domain": 0.483
+ },
+ "decode": {
+  "windows": 41,
+  "on_batch": 12,
+  "off_batch": 9,
+  "multi_boot": 0
+ },
+ "mixed": {
+  "windows": 25,
+  "A": 12,
+  "B": 9,
+  "C": 4
+ },
+ "tier": "full",
+ "l2_pocket_points": 32,
+ "quota_failures": []
+}
