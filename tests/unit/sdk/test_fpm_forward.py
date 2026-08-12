@@ -866,6 +866,59 @@ class TestFPMStaticAndMixed:
         assert per_op == {"fpm_forward_prefill": pytest.approx(22.0)}
         assert total == pytest.approx(22.0)
 
+    def test_genonly_mixed_call_keeps_full_decode_pass(self, fpm_session):
+        # With no prefill work in the step there is no pass to ride on: the
+        # decode component must keep its full standalone latency.
+        from aiconfigurator.sdk.config import RuntimeConfig
+
+        model, database, backend, isl, osl = fpm_session
+        runtime_config = RuntimeConfig(batch_size=2, beam_width=1, isl=2048, osl=osl, engine_step_backend="python")
+        _, _, graph_ops, _ = backend._get_mix_step_latency(
+            model, database, runtime_config, ctx_tokens=2048, gen_tokens=0, isl=2048, osl=osl, prefix=0
+        )
+        assert graph_ops["fpm_forward_prefill"] == pytest.approx(47.0)
+        _, _, eager_ops, _ = backend._get_mix_step_latency(
+            model, database, runtime_config, ctx_tokens=2048, gen_tokens=8, isl=2048, osl=osl, prefix=0
+        )
+        assert eager_ops["fpm_forward_prefill"] == pytest.approx(99.0)
+        assert eager_ops["fpm_forward_prefill"] > 2 * graph_ops["fpm_forward_prefill"]
+
+    def test_mixed_step_chunks_average_exact_coordinates(self, fpm_session):
+        # Spec tests 3+4: a chunked request prices each chunk at its own
+        # (chunk + gen, past_kv) coordinates — (1, 258, 0)=11.0 and
+        # (1, 258, 256)=13.0 for ctx=256 of isl=512 — and the component is
+        # their per-iteration average, identical to querying the chunks
+        # independently (no double billing, no averaging artifacts).
+        from aiconfigurator.sdk.config import RuntimeConfig
+
+        model, database, backend, isl, osl = fpm_session
+        runtime_config = RuntimeConfig(batch_size=2, beam_width=1, isl=isl, osl=osl, engine_step_backend="python")
+        total, _, per_op, _ = backend._get_mix_step_latency(
+            model, database, runtime_config, ctx_tokens=256, gen_tokens=2, isl=isl, osl=osl, prefix=0
+        )
+        prefill_op = model.context_ops[0]
+        chunk1 = float(
+            prefill_op.query_totals(database, batch_size=1, total_prefill_tokens=258, total_kv_read_tokens=0)
+        )
+        chunk2 = float(
+            prefill_op.query_totals(database, batch_size=1, total_prefill_tokens=258, total_kv_read_tokens=256)
+        )
+        assert per_op["fpm_forward_prefill"] == pytest.approx((chunk1 + chunk2) / 2) == pytest.approx(12.0)
+        assert total == pytest.approx(12.0 + 1.0)
+
+    def test_mixed_step_gen_zero_prices_pure_chunk(self, fpm_session):
+        # Spec test 5 (gen=0 degenerate): a pure-prefill step prices its own
+        # totals with no decode marginal term.
+        from aiconfigurator.sdk.config import RuntimeConfig
+
+        model, database, backend, isl, osl = fpm_session
+        runtime_config = RuntimeConfig(batch_size=2, beam_width=1, isl=isl, osl=osl, engine_step_backend="python")
+        total, _, per_op, _ = backend._get_mix_step_latency(
+            model, database, runtime_config, ctx_tokens=isl, gen_tokens=0, isl=isl, osl=osl, prefix=0
+        )
+        assert per_op == {"fpm_forward_prefill": pytest.approx(22.0)}
+        assert total == pytest.approx(22.0)
+
     def test_genonly_step_keeps_full_decode_pass(self, fpm_session):
         # With no prefill work in the step there is no pass to ride on: the
         # decode component must keep its full standalone latency. A step
