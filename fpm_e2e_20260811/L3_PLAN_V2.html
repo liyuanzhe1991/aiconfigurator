@@ -57,11 +57,15 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <tr><th>层</th><th>定义</th><th>验证什么</th><th>归属判定</th></tr>
 <tr><td><span class="tag tA">A</span>采集点</td><td>步坐标(或 mixed 的分量坐标)精确命中 parquet 行</td><td><b>数据保真 vs 真实</b>(全零 bug 属于这层)</td>
 <td rowspan="3">生成器对着 parquet <b>逐点程序断言</b>(<code>assert on_grid == expected</code>),人不判</td></tr>
-<tr><td><span class="tag tB">B</span>域内离网</td><td>域内但无采集行</td><td><b>插值 vs 真实</b></td></tr>
+<tr><td><span class="tag tB">B</span>域内离网</td><td>域内但无采集行;<b>prefill 按 (b, n, p) 三元组整体判定</b>——b、n 在网而 p 离网 = B</td><td><b>插值 vs 真实</b></td></tr>
 <tr><td><span class="tag tC">C</span>域外外插</td><td><b>仅 prefill bs 轴</b>:bp &gt; 采集上限 B<sub>c</sub></td><td>新增的 bs 外插功能</td></tr>
 </table>
 <div class="box warn"><b>外插边界(硬规则)</b>:C 组只存在于 prefill(及 mixed 的 prefill 分量)。decode 的 B 轴严格域内,
 不生成任何 decode 外插窗;模型在 B &gt; 采集最大批处照旧拒答。</div>
+<div class="box rule"><b>域内配比(硬配额)</b>:每相位域内单元 <b>A : B = 30 : 70</b>(生成器先造 B 池,再按覆盖优先级
+截取 A = 3/7 × |B|;必保项:悬崖对、每 bs/regime 至少一锚、prefix 锚)。
+<b>prefill past-kv 配额</b>:prefix&gt;0 的单元占 prefill 域内 ≥60%;prefix 值按<b>数值范围对数分位</b>取
+(0.02/0.08/0.25/0.5/0.75/0.95),不按格索引分位(prefix 格顶部密集,索引分位会挤在 200k+)。</div>
 
 <h2>3. prefill 矩阵(burst 法)</h2>
 <h3>3.1 制造方式</h3>
