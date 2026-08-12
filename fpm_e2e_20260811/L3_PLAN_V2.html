@@ -70,7 +70,10 @@ L0(查表位精确)是免费的上线前自检;L2(self-benchmark 显式点)只�
 <h2>3. prefill 矩阵(burst 法)</h2>
 <h3>3.1 制造方式</h3>
 <p>一次性齐发 bp 条等长随机 token 请求,约束 <code>bp × tok ≤ max_num_batched_tokens</code> ⇒ 整个 burst 落在
-<b>同一个调度步</b>,坐标 = (bp, bp×tok, 0),FPM 流逐步可读。每格 20 次 burst 取中位。</p>
+<b>同一个调度步</b>,坐标 = (bp, bp×tok, prefix),FPM 流逐步可读。<b>每格 5 发有效 burst 取中位</b>(单步噪声 0.3-1%,5 发足够)。</p>
+<div class="box rule"><b>发法</b>:kv=0 格 → 每发一次 <code>vllm bench serve --num-prompts bp --max-concurrency bp --random-input-len tok --random-output-len 1 --seed 每发换</code>;
+prefix 格 → asyncio 小驱动,prompt 传 token-id 数组:先发 1 条灌注前缀入缓存,每发 = bp 条 [固定前缀 + 新随机尾];
+<b>有效性过滤</b>:从 FPM 流校验该发产生的步坐标 == 设计格,burst 被拆步则作废自动补发,凑满 5 个有效样本为止。</div>
 <h3>3.2 点位推导规则(零手写常数,输入 = parquet + resolved-config)</h3>
 <table>
 <tr><th>参数</th><th>推导规则</th></tr>
