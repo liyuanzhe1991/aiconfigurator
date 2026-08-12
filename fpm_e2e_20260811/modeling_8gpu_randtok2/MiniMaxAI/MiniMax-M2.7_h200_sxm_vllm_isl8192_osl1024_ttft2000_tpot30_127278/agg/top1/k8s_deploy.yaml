@@ -1,0 +1,76 @@
+apiVersion: nvidia.com/v1alpha1
+kind: DynamoGraphDeployment
+metadata:
+  name: dynamo-agg
+spec:
+  services:
+    Frontend:
+      envFromSecret: hf-token-secret
+      componentType: frontend
+      replicas: 1
+      extraPodSpec:
+        nodeSelector:
+          nvidia.com/gpu.product: NVIDIA-H200
+        tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+        mainContainer:
+          image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.2.0
+          imagePullPolicy: IfNotPresent
+          command:
+          - python3
+          - -m
+          - dynamo.frontend
+          args:
+          - --http-port
+          - '8000'
+    VllmWorker:
+      envFromSecret: hf-token-secret
+      componentType: worker
+      replicas: 2
+      resources:
+        limits:
+          gpu: '4'
+      sharedMemory:
+        size: 64Gi
+      extraPodSpec:
+        nodeSelector:
+          nvidia.com/gpu.product: NVIDIA-H200
+        tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+        mainContainer:
+          image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.2.0
+          workingDir: /workspace/examples/backends/vllm
+          imagePullPolicy: IfNotPresent
+          command:
+          - python3
+          - -m
+          - dynamo.vllm
+          args:
+          - --model
+          - MiniMaxAI/MiniMax-M2.7
+          - --served-model-name
+          - MiniMaxAI/MiniMax-M2.7
+          - --tensor-parallel-size
+          - '4'
+          - --pipeline-parallel-size
+          - '1'
+          - --data-parallel-size
+          - '1'
+          - --enable-expert-parallel
+          - --kv-cache-dtype
+          - fp8
+          - --max-model-len
+          - '10716'
+          - --max-num-seqs
+          - '512'
+          - --max-num-batched-tokens
+          - '10204'
+          env:
+          - name: NCCL_CUMEM_ENABLE
+            value: '1'

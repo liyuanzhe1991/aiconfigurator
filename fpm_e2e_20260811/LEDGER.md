@@ -156,3 +156,67 @@ single-HW — cross-validate (qwen32b, h100) before any lands in the model.
   code path (API/detokenize/scheduler serialization candidates).
 - L0 exactness ≠ interpolation ≠ serving fidelity — different rungs, keep
   them separate when quoting this campaign.
+
+---
+
+# Round 2 — randtok2 re-collection & re-validation (2026-08-12)
+
+## Provenance delta from round 1
+
+| What | Value |
+|---|---|
+| Image | `nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok2-20260812` (sha256:3067293d…) — salt-paired randomized benchmark inputs; first attempt `randtok-20260812` (940e6bd4…) is BROKEN (independent RNG → prefix hash mismatch → 8,914 points dead) and must not be used |
+| Parquet | `fpm_formal_database_randtok/h200_sxm/vllm/0.25.1/` — 22,217 rows, schema v6, staged into aic-core systems tree replacing the round-1 (routing-collapse-biased) data |
+| Collection | 4/4 cells passed, 0 errors (TEP8 prefill needed `--resume-retry-failed` after a Teleport stream break — infra, not workload) |
+| L0 closure | 13,281 addressable points, worst rel err 0.000e+00 (bit-exact) |
+| 8k/1k prediction | TEP4 346.15 tok/s/gpu; TEP8 327.13 tok/s/gpu, 41.48 tok/s/user, TTFT 352.84 ms |
+
+## Headline: the -6.5% TPOT "accuracy" of round 1 was error cancellation
+
+Round-1 prefill rows were biased slow at large M (+15% @8192) and fast at
+small M; decode rows fast by -9%. In TPOT composition these partially
+cancelled → -6.5%. With prefill FIXED by randtok2 (aligned ≤±1.6% to real
+traffic across 128-8192), the honest decode gap is exposed: predicted TPOT
+24.11 ms vs real 27.36 ms = **-11.9%**, dominated by the unresolved decode
+routing-distribution band. Better data made the number worse — that is the
+point of this campaign.
+
+## Per-step rescore (12,647 real TEP8 steps vs randtok2 parquet)
+
+Full table: `per_step_validation.csv` (old-parquet copy kept as
+`per_step_validation_oldparquet.csv`).
+
+- decode main buckets: B=40 → -9.2% median, B=64 → -8.9% (routing band, unchanged by randtok2 — real-text routing is skewed, benchmark's uniform-random is not);
+- decode pad-up substructure: B∈{34..39,41} → -14~-17.4% (engine pads batch up to next capture size {40,48}, model interpolates linearly);
+- mixed: +8~10% median at Bd 32-61 (formula unfixed — expected; catastrophic tails -92~-98% at cross-boundary steps remain until MIXED_FORMULA_SPEC lands);
+- small-batch decode B≤5: -2.6~-4.9% (band shrinks with batch).
+
+## v2 expanded probes (TEP4, config-matched, randtok2 engine+data)
+
+Artifacts: `probes_v2/tep4/` (decode r1-r3 × 53 pts, prefill r1-r2 × 31 pts,
+decomp r4 × 7 pts), scores in `probes_v2_scores.csv`.
+
+**prefill (prefill-cell config: sync sched, graphs≤2048, prefix ON):**
+anchors MAPE 1.45% (median 0.65%), off-grid MAPE 2.57% (median 1.09%),
+2-rep noise floor 0.26%. Prefix axis (kv 128-98k) within ±4.3%. The one
+structural residual: the eager gap right after the 2048-cliff — real curve
+DIPS (2049→99.9 ms but 2304→93.5, flat to 3328, rises to 4096→108.2) so
+linear interp {2049→4096} overestimates by 9-11% at 2304-3328 (equivalently
+b=2/3328 -9.1%, b=4/2816 -8.7%). Fix owner: COLLECTOR lattice — densify
+eager tokens (add ~2304/2560/3072/3584); not a formula defect.
+
+**decode (decode-cell config):** 3-rep noise floor 1.21%. Anchors MAPE 3.85%,
+off-grid MAPE 7.14% — but the structure decomposes exactly:
+
+| mechanism | evidence (live vs model) | owner |
+|---|---|---|
+| batch-axis cliff bridging | b=600 +97%, b=768 +51%, b=550 +87%, b=900 +12% — interpolation skips the b=513 eager row and bridges b=512(graph)→b=1024; eager plateau is FLAT (513/550/900 → 87.9/86.3/88.8 ms), correct eager-segment interp would give -0.4% at b=900 | modeling PR (MIXED_FORMULA_SPEC §5) |
+| pad-up staircase | real(36)=31.19 ≈ real(40)=30.68 (Δ1.7%) vs linear model(36)=25.79 (+20.9%); off-lattice batches 12/20/28/44 read +7~10% | modeling PR (§5, step semantics) |
+| regime-transition rows contaminated | parquet b=513 row 98.70 vs live 87.90 (+12%); parquet (256,4096) row 24.72 vs live 20.88 stable across 3 reps (+18%) | collector (warmup at regime-transition coordinates) |
+| routing-distribution band | everything else lands -4~-9% signed (b=512 -6.9%, anchors -1~-5%), consistent with per-step stream | dense control (qwen32b) pending |
+
+## Cluster hygiene
+
+TEP4 probe pods deleted after harvest; namespace `yuanli-aic` verified empty.
+TEP8 probes pending full-node capacity (6/8 H200 nodes held by a neighbor
+tenant's 8-GPU jobs; capacity watch armed).

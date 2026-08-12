@@ -1,0 +1,161 @@
+{
+ "schema_version": 1,
+ "prefill": [
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 1024,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2048,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2049,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4096,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 8192,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2304,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2816,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 3328,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 3840,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4352,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4864,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 5376,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 5888,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 6400,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 6912,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 7424,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 7936,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 2,
+   "total_prefill_tokens": 3328,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 3,
+   "total_prefill_tokens": 1920,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 3,
+   "total_prefill_tokens": 5376,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 4,
+   "total_prefill_tokens": 2816,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 4,
+   "total_prefill_tokens": 6400,
+   "total_kv_read_tokens": 0
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 1312,
+   "total_kv_read_tokens": 128
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 512,
+   "total_kv_read_tokens": 2048
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 184,
+   "total_kv_read_tokens": 32768
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2048,
+   "total_kv_read_tokens": 384
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2048,
+   "total_kv_read_tokens": 6144
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 2048,
+   "total_kv_read_tokens": 98304
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4096,
+   "total_kv_read_tokens": 384
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4096,
+   "total_kv_read_tokens": 6144
+  },
+  {
+   "batch_size": 1,
+   "total_prefill_tokens": 4096,
+   "total_kv_read_tokens": 98304
+  }
+ ],
+ "decode": []
+}

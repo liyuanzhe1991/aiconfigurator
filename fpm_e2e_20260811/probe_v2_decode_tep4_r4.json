@@ -1,0 +1,34 @@
+{
+ "schema_version": 1,
+ "prefill": [],
+ "decode": [
+  {
+   "batch_size": 16,
+   "total_kv_read_tokens": 8176
+  },
+  {
+   "batch_size": 32,
+   "total_kv_read_tokens": 745472
+  },
+  {
+   "batch_size": 40,
+   "total_kv_read_tokens": 838840
+  },
+  {
+   "batch_size": 512,
+   "total_kv_read_tokens": 65536
+  },
+  {
+   "batch_size": 513,
+   "total_kv_read_tokens": 65664
+  },
+  {
+   "batch_size": 550,
+   "total_kv_read_tokens": 66000
+  },
+  {
+   "batch_size": 900,
+   "total_kv_read_tokens": 65700
+  }
+ ]
+}

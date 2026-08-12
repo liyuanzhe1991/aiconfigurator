@@ -132,7 +132,7 @@ $PY collector/collect.py --backend vllm --ops fpm_forward \
   --namespace yuanli-aic \
   --model-cache model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
   --image-pull-secret nvcr-push-secret \
-  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok-20260812 \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok2-20260812 \
   --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}' \
   --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0}}' \
   --fpm-orchestrator grove --transport ib \
@@ -153,7 +153,7 @@ $PY collector/collect.py --backend vllm --ops fpm_forward \
   --namespace yuanli-aic \
   --model-cache shared-model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
   --image-pull-secret nvcr-push-secret \
-  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok-20260812 \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok2-20260812 \
   --generator-set 'K8sConfig.worker_extra_pod_spec={"nodeSelector":{"nvidia.com/gpu.product":"NVIDIA-H100-80GB-HBM3"},"securityContext":{"runAsUser":0,"runAsGroup":0}}' \
   --fpm-orchestrator grove --transport efa \
   --fpm-database-root "$PWD/fpm_formal_database"
@@ -611,7 +611,8 @@ variants of the frozen dynamo build; the Step 4 commands pin them per cluster:
 
 | Cluster | Image tag | Why this one |
 |---|---|---|
-| h100, h200 (**next campaign**) | `gc-steady-randtok-20260812` | = 16xfix + randomized benchmark inputs (the all-zero `[0]*n` prompts collapsed MoE routing and biased the measurements; fix validated 2026-08-11: prefill 128-8192 aligns with real traffic to ≤±1.5%). Digest `sha256:940e6bd4…` |
+| h100, h200 (**current**) | `gc-steady-randtok2-20260812` | = 16xfix + salt-paired randomized benchmark inputs (the all-zero `[0]*n` prompts collapsed MoE routing and biased the measurements; fix validated on the 2026-08-12 re-collection: prefill 128-8192 aligns with real traffic to ≤±1.6%). Digest `sha256:3067293d…` |
+| — (broken, do not use) | `gc-steady-randtok-20260812` | first randomization attempt; prefix seeding and consumer randomized independently → block-hash mismatch → every `total_kv_read_tokens>0` point fails `fake_prefix_cache_validation_failed`. Superseded by randtok2's salt-paired RNG |
 | h100, h200 (2026-08-11 campaign, superseded) | `gc-steady-16xfix-20260809` | x86 steady build + the 16-GPU multinode fix; its parquet carries the routing-collapse bias |
 | gb200 | `gc-steady-arm64-schedonly-20260810` | ARM64 build; carries the dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200) |
 | b200 | `d719cca-gc-steady-20260729` | the original frozen baseline (dynamo `d719cca`) |

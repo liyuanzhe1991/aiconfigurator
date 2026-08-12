@@ -1,0 +1,9 @@
+{
+  "genonly_step": {
+    "fpm_forward_decode": "silicon"
+  },
+  "mix_step": {
+    "fpm_forward_decode": "silicon",
+    "fpm_forward_prefill": "silicon"
+  }
+}

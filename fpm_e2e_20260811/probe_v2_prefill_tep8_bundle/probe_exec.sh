@@ -5,7 +5,7 @@ OUT=$1
 rm -f "$OUT"
 PROBE_OUT=$OUT bash /tmp/fpm-probe/run.sh > "${OUT%.json}.stdout.log" 2>&1 &
 EPID=$!
-for i in $(seq 1 600); do
+for i in $(seq 1 240); do
   if [ -s "$OUT" ] && python3 -c "import json,sys; d=json.load(open('$OUT')); sys.exit(0 if d.get('status') else 1)" 2>/dev/null; then
     sleep 3
     kill -TERM -- "-$EPID" 2>/dev/null || kill -TERM "$EPID" 2>/dev/null
@@ -18,6 +18,6 @@ for i in $(seq 1 600); do
   fi
   sleep 5
 done
-echo "probe timeout after 50min"
+echo "probe timeout after 20min"
 kill -KILL -- "-$EPID" 2>/dev/null; kill -KILL "$EPID" 2>/dev/null
 exit 1

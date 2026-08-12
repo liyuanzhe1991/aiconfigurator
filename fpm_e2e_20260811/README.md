@@ -26,7 +26,7 @@
 
 1. **根因**:benchmark 合成输入是 `[0]*n` → MoE 路由退化 → 采集数据小 M 偏快 / 大 M 偏慢;
    一行随机化修复使 prefill 128-8192 对齐真实流量 ≤±1.5%(判别实验实测)。
-2. **新采集镜像**:`nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok-20260812`。
+2. **新采集镜像**:`nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-randtok2-20260812`。
 3. **插值层达标**(1.3-2.5% ≈ 噪声地板);**mixed 需公式改造**(见 SPEC);
    **decode 余 -5~-8% 路由分布带**(dense 对照待做)。
 
