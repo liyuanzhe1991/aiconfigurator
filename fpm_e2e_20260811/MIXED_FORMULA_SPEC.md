@@ -161,3 +161,22 @@ v2 离网探针(randtok2 数据,decode 配置对齐,TEP4)实测:
 - **告示 2(振荡口袋)**:prefix 轴与 decode KV 轴存在 kernel-plan 振荡区
   (实测复现,非坏行;见 LEDGER round-2)。插值在口袋内有 ~±25% 局部误差
   地板,格点命中不受影响。公式层不处理;文档标注即可。
+
+### §5 增补 2:regime 边界从哪来(回应"inference 侧没有 cudagraph 参数")
+
+这个依赖不是新增的——parquet 每一行的数值本来就是被采集引擎的 capture 面
+决定的,FPM 的配置一致性教义(部署 == 采集)意味着数据只对同 capture 面
+有效。修法只是让插值器尊重数据里已有的结构。**查询接口不变**,边界来源
+按优先级:
+
+1. **纯数据驱动(modeling PR 用这个,对 v6 数据立即生效)**:扫相邻批次对
+   (b, b+1),latency 跳变 ≥2×(实测悬崖 2.6-3.5×,远超坏行 ±12% 污染)即
+   regime 边界;悬崖对 (512,513)、(2048,2049) 正是采集器留下的标记。
+   prefill token 轴在 §2.1 已用同一约定。
+2. **sidecar 记录(collector PR,schema v7)**:把 resolved-config dump 里的
+   `cudagraph_capture_sizes` 写入 sidecar(dump 已存在于采集工件,零成本)。
+   两者都在时 sidecar 为准、数据推导作校验——校验不一致即部署/采集漂移,
+   直接报错,这本身是教义的运行时守卫。
+
+边界情形:悬崖对缺失 → eager 区 = 域外,FPM 不外推,行为不变;
+过渡行污染不影响 ≥2× 跳变检测。
