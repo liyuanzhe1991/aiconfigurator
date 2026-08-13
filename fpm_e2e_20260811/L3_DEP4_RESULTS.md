@@ -20,11 +20,11 @@ collector 自身 `aggregate_cell` 校验聚合;**非正式发布**,发布路线�
 - **prefill(含 bs 外插)达标**:误差全域 3-9%,C 层随外插倍数(1.5x→4x)
   **不增长**(1x-2x 3.94% / 2x-4x 3.93%)——batch clamp 外插在 dep4 成立。
   全部点 model 略高(+3~7%),部分归因于独跑估计器的残余稀释(§2.3)。
-- **decode 与 tep4 同分布**:tep4 decode B 为 9.24%/P95 17.4%,dep4 11.35%/
-  P95 18.6%——这是跨战役已知残差(randtok 路由带 -5~-9% + 巨 KV 口袋
-  15-40% + regime 过渡),**不是 dep4 新问题**。方向一致:model 偏快
-  (中位 model/meas=0.88)。decode A 的 12.5% 集中在玩具坐标
-  (kv≤32,亚毫秒级步,调度开销主导)。
+- **decode 的 11.35% 不是一个 gap,是三个成分**(分解见 §5):
+  Bd=512 的 DP graph 边界跨骑(2,062 点,34%,确定性,机制已判)+
+  小墙钟 serving 常数开销(17 万点,绝对差中位仅 +3.2ms)+
+  真实建模质量(墙钟≥50ms 且剔 512:**5.63% / P95 11.9%**)。
+  tep4 decode B 9.24% 是同配方(无 DP,不踩 512 跨骑)。
 - **采集数据本身被真实流量证实**:干净均衡步 vs parquet 格点 = -3~-7%
   (例 (4,1024,0):独跑 84.3ms vs 采集 87.8ms)。
 
@@ -74,7 +74,44 @@ all-to-all 满负载)。真实流量步大多不满足:
    即为均衡步,kv 深梯子恢复可通约。
 4. mixed 探针同理:bp 取 DP 的倍数。
 
-## 4. 复现
+## 5. decode 三成分归因(2026-08-13 探针战役)
+
+### 5.1 Bd=512:DP graph 边界跨骑(确定性,非抽签)
+
+| 证据 | 数值 |
+|---|---|
+| 采集 batch=512(balanced,全 rank 精确 512)| 62ms(FULL graph,`expected_cudagraph_mode=FULL, capture_size=512`)|
+| 采集 batch=513(超出默认 capture 表)| 103-106ms(eager)|
+| 真实流量 C=512 池(L3 + 探针 boot1/2/3,4 个独立 boot)| **106-112ms,全部 eager 档,零翻档** |
+| 真实流量 C=513 池 | 111ms(eager,与采集 eager 值 +6% serving 开销吻合)|
+
+机制:decode 引擎(两侧同配置)默认 capture 表 `[1..512]`;DP 下 router
+摊派不均衡(rank 持有实测 497-546,偏斜可达 +34),池 ~2048 时必有 rank
+越过 512 → 该 lockstep 步全组落到 eager 水平。自基准的 balanced_v1(全
+rank 精确 512)命中 graph,真实部署永远跨骑 → 62 vs 111 的 80% 错位。
+旁证:C=300 池(全员 graph)差 +0.27ms;C=600/900/1024(两边都 eager)
+差 ±3ms;窗口排水段(全员降到 ≤512)墙钟从 112 骤降 76.8;tep4(无 DP)
+的 C=512 无此现象。
+
+**修法**(验证实验 `probe_fix_capture.sh` 待 GPU):decode 显式
+compilation-config 把 capture 表覆盖到最大并发(prefill 配置早已到 2048)
+→ 边界移出工作区,真实性能本身提升 ~80%,且与采集值重新对齐;上游
+issue:DP padding-to-max 使 ±1 请求不均衡把全组打下 graph。
+注意采集侧 (512, kv=16384)=75.2ms 鼓包是另一独立小异常(疑似口袋家族)。
+
+### 5.2 小墙钟 serving 常数开销
+
+剔 512 后墙钟<50ms 的 17 万点:MAPE 11.9% 但绝对差中位 +3.2ms、95.8%
+实测偏慢——自基准安静稳态 vs serve 语境(lockstep 木桶抖动 + 同 pod
+frontend/bench/listener CPU 竞争)的固定开销,小步上放大为 10-20% 相对差。
+逐点等权 MAPE 被小墙钟步主导,故总均值 11.35% 高估了建模误差。
+
+### 5.3 结论口径
+
+对吞吐建模要紧的口径(墙钟≥50ms,剔 512 跨骑):**decode 5.63% / P95
+11.9%**。512 跨骑修复(capture 扩表)落地后应全量重测。
+
+## 6. 复现
 
 ```bash
 .venv/bin/python fpm_e2e_20260811/build_dep4_analysis_db.py
