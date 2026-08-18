@@ -12,6 +12,7 @@ done
 bash /tmp/fpm-serve/serve_run_dep4_prefill.sh >/results/engine_prefill.log 2>&1 &
 for i in $(seq 1 240); do curl -sf http://127.0.0.1:8000/v1/models 2>/dev/null | grep -q MiniMax && break; sleep 5; done
 echo "T_prefill_ready=$(date +%s)" >> /results/l3_timing.log
+export L3_TOKENIZER=/workspace/model_cache/models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b
 export L3_SHAREGPT_PATH=/workspace/model_cache/fpm_datasets/ShareGPT_V3_unfiltered_cleaned_split.json
 export L3_DP_MODE=1
 python3 /tmp/fpm-serve/burst_driver.py /tmp/fpm-serve/prefill_plan.csv /results/fpm_stream.jsonl /results/burst_windows.tsv 2>&1 | tee /results/burst_driver.log

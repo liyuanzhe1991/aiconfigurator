@@ -10,3 +10,7 @@
   tp4 为新 cell,首跑建档、不设判据(R16 §4)。
 - 真值内容:ShareGPT 奇数池(采集偶数池,分池防考题污染);serving = parity
   配置 + 原版调度器,镜像 gc-timing-20260818(与采集同镜像)。
+
+更正(2026-08-19):dep4 prefill 计划换为 r14/prefill_plan_dep4_r14.csv
+(×4 均衡版,bp%4==0 契约;bundle 里的 ×1 版是 rank0-only 稀释时代陈旧件,
+DP 拦路石断言会正确拒绝它)。
