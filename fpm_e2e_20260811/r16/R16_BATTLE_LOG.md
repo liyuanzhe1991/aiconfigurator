@@ -123,3 +123,20 @@ inference=measured_iteration_seconds;other=余项。守恒 ±5%。
   campaign_incomplete+非零退出;恢复走官方 resume(重跑同命令,只补失败
   cell,顺带端到端验收 resume)。修法建议(follow-up):分块传输(≤16MB/块
   逐块 sha)或 PVC 出件通道;重试加指数退避。dev session 离线,回线即转达。
+
+## C1-C3 收官(2026-08-18 深夜)
+
+- C1:三拓扑全收(tep4 113.5m / dep4 91.3m / tp4 35.4m,合计 4.00h),
+  32,797 行单 parquet;dep4 中途遭 teleport 会话级流劣化(缺陷4,重登自愈,
+  重跑 91m);tp4 无预热验证了"预热=一半采集时长"的结构。
+- 耗时地图:守恒差 0.0%;kvwarm 109.6m(46%)> 带内簿记 33.1m > 拉起 33.0m;
+  inference 43.8m 为被测本体。
+- C2:发布内建;坐标合并语义实证(tep4 1659 样本→1557 唯一坐标,102 个
+  巨点钳位重复按设计合并)。
+- 真值计划:r15 计划复用(tep4/dep4)+ tp4 同构(truth_plans/,含来源裁定)。
+- C3:官方 `cli estimate --forward-model fpm` 三拓扑出数(bs32/ctx2048:
+  tep4 59.7 tok/s/u;dep4 34.5×128 并发;tp4 75.3)。需重编 native 核
+  (schema 7→11 偏斜);上游发现:agg 仿真 ramp 段查询低于采集包络
+  (kv=31@batch 25/32 桥)被 FPM fail-closed 拒绝——仿真需 clamp 或网格补
+  ctx=1 档;发布布局 vs V3 op 轴布局两条 cosmetic warning。
+- 状态:C4(全新真值,三拓扑)待用户指令。
