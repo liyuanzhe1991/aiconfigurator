@@ -5,6 +5,13 @@
 set -uo pipefail
 WORKDIR=/tmp/fpm-serve
 
+# 引擎 boot 前排空守卫(方法论:显存 <1GB 才放行)
+for _ in $(seq 1 30); do
+  USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | sort -rn | head -1)
+  [ "${USED:-99999}" -lt 1000 ] && break
+  sleep 4
+done
+
 rm -rf /tmp/fpm-forward-etcd
 etcd --data-dir /tmp/fpm-forward-etcd \
   --listen-client-urls http://0.0.0.0:2379 \
