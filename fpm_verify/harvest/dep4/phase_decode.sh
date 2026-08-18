@@ -4,7 +4,12 @@ DP=4
 TOK=/workspace/model_cache/models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b
 cd /workspace/examples/backends/vllm
 echo "T_decode_stack_start=$(date +%s)" >> /results/l3_timing.log
-pkill -9 -f "dynamo[.]vllm"; pkill -9 -f "VLLM[:]:"; sleep 8
+pkill -9 -f "dynamo[.]vllm"; pkill -9 -f "VLLM[:]:"
+for _ in $(seq 1 30); do
+  USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | sort -rn | head -1)
+  [ "${USED:-99999}" -lt 1000 ] && break
+  sleep 4
+done
 export DYN_FORWARDPASS_METRIC_PORT=20380
 bash /tmp/fpm-serve/serve_run_dep4_decode.sh >/results/engine_decode.log 2>&1 &
 for i in $(seq 1 240); do curl -sf http://127.0.0.1:8000/v1/models 2>/dev/null | grep -q MiniMax && break; sleep 5; done
