@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fpm-l3-tep4-agg
+  labels:
+    app.kubernetes.io/name: fpm-l3-tep4-agg
+    app.kubernetes.io/component: fpm-resource
+    kai.scheduler/queue: dynamo
+    aiconfigurator.nvidia.com/owned-by: fpm-forward-collector
+    aiconfigurator.nvidia.com/plan: a70dcfbf9d719a3a
+    aiconfigurator.nvidia.com/cell: fpm-l3-tep4
+  namespace: yuanli-aic
+spec:
+  volumes:
+  - name: model-cache
+    persistentVolumeClaim:
+      claimName: model-cache
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 64Gi
+  imagePullSecrets:
+  - name: nvcr-push-secret
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-H200
+  tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  schedulerName: kai-scheduler
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  containers:
+  - image: nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818
+    workingDir: /workspace/examples/backends/vllm
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - name: model-cache
+      mountPath: /workspace/model_cache
+    - name: model-cache
+      mountPath: /results
+      subPath: _yuanli_l3_results/r16_tep4
+    - name: dshm
+      mountPath: /dev/shm
+    name: fpm-resource
+    resources:
+      limits:
+        nvidia.com/gpu: '4'
+    command:
+    - /bin/bash
+    - -lc
+    args:
+    - exec sleep infinity
+  restartPolicy: Always
