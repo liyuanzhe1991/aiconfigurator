@@ -140,3 +140,28 @@ inference=measured_iteration_seconds;other=余项。守恒 ±5%。
   (kv=31@batch 25/32 桥)被 FPM fail-closed 拒绝——仿真需 clamp 或网格补
   ctx=1 档;发布布局 vs V3 op 轴布局两条 cosmetic warning。
 - 状态:C4(全新真值,三拓扑)待用户指令。
+
+### 耗时地图·按 cell 分列(prefill/decode,用户要求口径)
+
+| topo | cell | cell总 | 拉起+退场 | kvwarm | inference | 内容+播种 | 带内其他 | 调度取件 |
+|---|---|---|---|---|---|---|---|---|
+| tep4 | prefill | 24.9m | 6.2m | — | 9.9m | 3.2m | 3.9m | 1.7m |
+| tep4 | decode | 88.6m | 4.4m | 72.2m(81%) | 1.0m | 0.2m | 8.9m | 2.0m |
+| dep4 | prefill | 37.5m | 7.2m | — | 21.3m | 2.7m | 4.3m | 2.1m |
+| dep4 | decode | 53.8m | 5.6m | 37.4m(70%) | 1.1m | 0.2m | 7.6m | 1.9m |
+| tp4 | prefill | 24.1m | 5.4m | — | 9.8m | 3.3m | 3.9m | 1.7m |
+| tp4 | decode | 11.4m | 4.3m | — | 0.8m | 0.2m | 4.5m | 1.6m |
+
+结构结论:prefill cell 大头=inference 本体(不可压,可压项=拉起);
+decode cell 大头=预热(72/37m 换 ~1m 测量的 KV 真实性,tp4 免预热 11.4m
+反衬);带内其他=每点注入拍+簿记(decode ~0.3s/点,prefill ~25ms/点)。
+提速分道:decode 攻预热摊销,prefill 攻拉起,inference 双双不碰。
+
+### C3 预测全景(官方 estimate,fpm forward)
+
+prefill(static_ctx, bs=1, isl=4096):tep4 9.45 seq/s(~106ms);
+dep4 14.54 合计/4 副本(~275ms/副本);tp4 9.01(~111ms)。
+decode(static_gen, bs=32, ctx=2048):tep4 59.7 tok/s/u;dep4 34.5×128 并发
+(seq/s 17.3 最高);tp4 75.3 tok/s/u 单步最快。
+物理自洽:dep prefill 单请求慢×并发补吞吐(印证"没人用 dep 做 prefill");
+tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
