@@ -103,6 +103,7 @@ There is no wrapper script: every command below is the complete, literal
 | `--model-cache PVC:MOUNT:SUBPATH` | model cache: PVC name / mount point in pod / snapshot dir. **SUBPATH must reach `models--ORG--NAME/snapshots/<rev>`** (the dir holding `config.json`) — the cache root is not a valid model dir. Look it up: see 3.2 | per model & cluster |
 | `--image-pull-secret nvcr-push-secret` | NGC private-registry pull credential | never |
 | `--generator-set K8sConfig.k8s_image=...` | engine container image — pinned per cluster, do not bump casually (Appendix B) | per cluster |
+| `--generator-set 'K8sConfig.extra_env=[...]'` | content source for prefill points (`DYN_BENCH_PREFILL_CONTENT=sharegpt`): the engine draws from the sharegpt **even** pool (collection pool; the odd pool is reserved for verification truth). Only meaningful on the x86 timing image; ARM (GB200) lacks the content dispatcher — omit there | x86 clusters |
 | `--generator-set K8sConfig.fpm_resource_labels=...` | extra pod labels — KAI queue compliance (missing ⇒ pods reclaimed, exit 137) | KAI clusters |
 | `--generator-set K8sConfig.worker_extra_pod_spec=...` | pod-spec patch: `runAsUser:0` (FlashInfer cubin write access), `schedulerName: kai-scheduler`, bad-node blacklist affinity, GFD label overrides | per cluster |
 | `--fpm-orchestrator grove` | multinode orchestrator (Grove PodCliqueSet); omitted on B200 where LWS works | per cluster |
@@ -124,7 +125,8 @@ $PY collector/collect.py --backend vllm --ops fpm_forward \
   --namespace yuanli-aic \
   --model-cache model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
   --image-pull-secret nvcr-push-secret \
-  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-16xfix-20260809 \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818 \
+  --generator-set 'K8sConfig.extra_env=[{"name":"DYN_BENCH_PREFILL_CONTENT","value":"sharegpt"}]' \
   --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}' \
   --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0}}' \
   --fpm-orchestrator grove --transport ib \
@@ -145,7 +147,8 @@ $PY collector/collect.py --backend vllm --ops fpm_forward \
   --namespace yuanli-aic \
   --model-cache shared-model-cache:/workspace/model_cache:models--MiniMaxAI--MiniMax-M2.7/snapshots/d494266a4affc0d2995ba1fa35c8481cbd84294b \
   --image-pull-secret nvcr-push-secret \
-  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-steady-16xfix-20260809 \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818 \
+  --generator-set 'K8sConfig.extra_env=[{"name":"DYN_BENCH_PREFILL_CONTENT","value":"sharegpt"}]' \
   --generator-set 'K8sConfig.worker_extra_pod_spec={"nodeSelector":{"nvidia.com/gpu.product":"NVIDIA-H100-80GB-HBM3"},"securityContext":{"runAsUser":0,"runAsGroup":0}}' \
   --fpm-orchestrator grove --transport efa \
   --fpm-database-root "$PWD/fpm_formal_database"
@@ -182,7 +185,8 @@ $PY collector/collect.py --backend vllm --ops fpm_forward \
   --namespace yuanli-aic \
   --model-cache shared-model-cache:/workspace/model_cache:models--nvidia--GLM-5.2-NVFP4/snapshots/aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa \
   --image-pull-secret nvcr-push-secret \
-  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:d719cca-gc-steady-20260729 \
+  --generator-set K8sConfig.k8s_image=nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818 \
+  --generator-set 'K8sConfig.extra_env=[{"name":"DYN_BENCH_PREFILL_CONTENT","value":"sharegpt"}]' \
   --generator-set 'K8sConfig.fpm_resource_labels={"kai.scheduler/queue":"dynamo"}' \
   --generator-set 'K8sConfig.worker_extra_pod_spec={"schedulerName":"kai-scheduler","securityContext":{"runAsUser":0,"runAsGroup":0},"affinity":{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"NotIn","values":["cluster-0967a26d-pool-14bee067-prctr-xmhbj","cluster-0967a26d-pool-14bee067-prctr-7wrxm"]}]}]}}}}' \
   --fpm-database-root "$PWD/fpm_formal_database"
@@ -284,7 +288,7 @@ Each cluster's command block in Step 4 differs in exactly these values:
 - GPU profile passed to the collector (`--gpu h100_sxm / h200_sxm / gb200 / b200_sxm`)
 - transport (`--transport efa / ib / nvlink`, or none for B200's LWS default)
 - orchestrator (`--fpm-orchestrator grove` everywhere except B200)
-- container image (x86 clusters use the steady image; GB200 **must** use the ARM image `gc-steady-arm64-schedonly-20260810`)
+- container image (x86 clusters use the timing image `gc-timing-20260818`; GB200 **must** use the ARM image `gc-steady-arm64-schedonly-20260810`)
 - KAI queue-compliance labels and known-bad-node blacklists
 
 **To add a cluster**: copy the closest Step 4 command block, change context/PVC/image/transport, and keep the KAI labels if the cluster enforces queue scheduling (pods that bypass the queue get reclaimed with exit 137).
@@ -411,10 +415,10 @@ same commit.
 
 | Cluster | kubectl context | Arch | `--gpu` | PVC | Image tag (details: Appendix B) | Orchestrator / transport | KAI queue label | Known-bad nodes (affinity blacklist) | 16 GPUs = nodes |
 |---|---|---|---|---|---|---|---|---|---|
-| h100 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-02` | x86 | `h100_sxm` | `shared-model-cache` | `gc-steady-16xfix-20260809` | grove / efa | — (not enforced; needs explicit GFD nodeSelector `NVIDIA-H100-80GB-HBM3`) | — | 2 |
-| h200 | `nv-prd-dgxc.teleport.sh-dynamo-nebius-2` | x86 | `h200_sxm` | `model-cache` | `gc-steady-16xfix-20260809` | grove / ib | `dynamo` | — | 2 |
+| h100 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-02` | x86 | `h100_sxm` | `shared-model-cache` | `gc-timing-20260818` | grove / efa | — (not enforced; needs explicit GFD nodeSelector `NVIDIA-H100-80GB-HBM3`) | — | 2 |
+| h200 | `nv-prd-dgxc.teleport.sh-dynamo-nebius-2` | x86 | `h200_sxm` | `model-cache` | `gc-timing-20260818` | grove / ib | `dynamo` | — | 2 |
 | gb200 | `nv-prd-dgxc.teleport.sh-dynamo-aws-dev-01` | **ARM** | `gb200` | `model-cache` | `gc-steady-arm64-schedonly-20260810` | grove / nvlink | `default-queue` | `ip-100-64-148-63/-173-248/-174-195/-226-152.ec2.internal` (2026-08-10 IMEX incident; drop when cluster fixed) | 4 (4 GPUs/node) |
-| b200 | `nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster` | x86 | `b200_sxm` | `shared-model-cache` | `d719cca-gc-steady-20260729` | LWS default / — | `dynamo` | `…-prctr-xmhbj`, `…-prctr-7wrxm` (dirty GPUs) | 2 |
+| b200 | `nv-prd-dgxc.teleport.sh-dynamo-nscale-dev-cluster` | x86 | `b200_sxm` | `shared-model-cache` | `gc-timing-20260818` | LWS default / — | `dynamo` | `…-prctr-xmhbj`, `…-prctr-7wrxm` (dirty GPUs) | 2 |
 
 ### Per-model values
 
@@ -443,9 +447,8 @@ variants of the frozen dynamo build; the Step 4 commands pin them per cluster:
 
 | Cluster | Image tag | Why this one |
 |---|---|---|
-| h100, h200 | `gc-steady-16xfix-20260809` | x86 steady build + the 16-GPU multinode fix |
-| gb200 | `gc-steady-arm64-schedonly-20260810` | ARM64 build; carries the dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200) |
-| b200 | `d719cca-gc-steady-20260729` | the original frozen baseline (dynamo `d719cca`) |
+| h100, h200, b200 | `gc-timing-20260818` | x86 build: real-content pools (sharegpt, even/odd split) + engine phase timing (`timing.phases`); carries the 16-GPU multinode fix; zero measurement overhead verified (5-boot Guaranteed-pod A/B, in-envelope). Digest `sha256:adcd28a943c7811e71931a4c154d31cb95d126469bc9b4fe2a8981f5327e8c48` |
+| gb200 | `gc-steady-arm64-schedonly-20260810` | ARM64 build; carries the dual-signature scheduler fix; **lacks FP4 kernels** (why glm-nvfp4 is barred from GB200) and has no timing/content-pool rev yet |
 
 Rules:
 
