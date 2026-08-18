@@ -65,15 +65,26 @@ DYN_BENCH_PREFILL_CONTENT=sharegpt)、引擎网格(产品自动生成,边界封�
 
 ## 4. 实测耗时(2026-08-18,守恒差 0.0%)
 
-| topo | cell | cell总 | 拉起+退场 | kvwarm | inference | 内容+播种 | 带内其他 | 调度取件 |
+| Topology | Cell | Cell total | Engine startup & teardown | KV-cache warm-up | Measured inference | Input gen & KV seeding | Benchmark protocol overhead | Scheduling & artifact retrieval |
 |---|---|---|---|---|---|---|---|---|
-| tep4 | prefill | 24.9m | 6.2m | — | 9.9m | 3.2m | 3.9m | 1.7m |
-| tep4 | decode | 88.6m | 4.4m | 72.2m | 1.0m | 0.2m | 8.9m | 2.0m |
-| dep4 | prefill | 37.5m | 7.2m | — | 21.3m | 2.7m | 4.3m | 2.1m |
-| dep4 | decode | 53.8m | 5.6m | 37.4m | 1.1m | 0.2m | 7.6m | 1.9m |
-| tp4 | prefill | 24.1m | 5.4m | — | 9.8m | 3.3m | 3.9m | 1.7m |
-| tp4 | decode | 11.4m | 4.3m | — | 0.8m | 0.2m | 4.5m | 1.6m |
-| **合计** | | **240.2m = 4.00h** | | | | | | |
+| tep4 | prefill | 24.9 min | 6.2 | — | 9.9 | 3.2 | 3.9 | 1.7 |
+| tep4 | decode | 88.6 min | 4.4 | **72.2 (81%)** | 1.0 | 0.2 | 8.9 | 2.0 |
+| dep4 | prefill | 37.5 min | 7.2 | — | 21.3 | 2.7 | 4.3 | 2.1 |
+| dep4 | decode | 53.8 min | 5.6 | **37.4 (70%)** | 1.1 | 0.2 | 7.6 | 1.9 |
+| tp4 | prefill | 24.1 min | 5.4 | — | 9.8 | 3.3 | 3.9 | 1.7 |
+| tp4 | decode | 11.4 min | 4.3 | — | 0.8 | 0.2 | 4.5 | 1.6 |
+| **Total** | | **240.2 min (4.0 h)** | 33.0 | 109.6 (46%) | 43.8 | 12.6 | 33.1 | 11.0 |
+
+Column semantics: *Engine startup & teardown* = process launch → benchmark
+start, plus shutdown (weight load, init, cudagraph capture); *KV-cache
+warm-up* = real-KV chain building before decode measurement; *Measured
+inference* = wall-clock sum of measured forward steps (the measurement
+itself); *Input gen & KV seeding* = ShareGPT input-window generation +
+prefix seeding for kv>0 prefill points; *Benchmark protocol overhead* =
+non-measured protocol steps (request-admission beats, fake block-table
+fabrication, extra median beats, point transitions, bookkeeping);
+*Scheduling & artifact retrieval* = pod scheduling, staging, artifact
+fetch.
 
 数据源:run-manifest(cell_total/collector 相位/engine_timing)+ benchmark JSON
 (timing.phases、kvwarm.stages[].build_seconds、measured_iteration_seconds)。
