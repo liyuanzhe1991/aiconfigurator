@@ -72,22 +72,42 @@ MAPE 7.66/7.39% → **1.70/1.61%**(tep4/dep4),prefill 18.17% → **4.76%**
 
 | tag | 内容 | 状态 |
 |---|---|---|
-| gc-steady-randtok2-20260812 | 随机 token 修复(上一轮) | 基底 |
-| **gc-realcontent-20260818** | + kvwarm 11 手术 + 真实内容 v4 + args dump 修复 + 原件备份(instrumented_scheduler_pristine.py) | **现役** |
+| gc-steady-randtok2-20260812 | 随机 token 修复(上一轮) | 曾任基底 |
+| gc-realcontent-20260818 | + kvwarm 11 手术 + 真实内容 v4 + args dump 修复 + 原件备份(instrumented_scheduler_pristine.py) | rev2 基底 |
+| **gc-timing-20260818** | + timing_patch(相位耗时仪表,timing.phases;层=调度器单文件,sha256 ed383f95…dbaf) | **现役**(digest adcd28a9…8c48) |
 
 烘焙法:in-cluster crane pod(`crane append -f layer.tar -b <基底> -t <tag>`,
-nvcr-push-secret 只挂 pod 内,凭证不落本机)。层内 3 文件。验证:全新拉取 →
-标记 grep(kvwarm×3 / v4×2 / 备份×1)+ compile 通过。
+nvcr-push-secret 只挂 pod 内,凭证不落本机)。验证:全新拉取 → digest 比对 +
+标记 grep(kvwarm×9 / v4×6 / timing×1 / 备份×1 / argsdump 正则)+ compile 通过。
 **B200 适用**:层为纯 Python(架构无关);基底 torch arch list 含 sm100,
 GLM5.2×B200 冒烟已实证(kvwarm 零改动工作、4/4 real-kv)。
 
+### 2.1 timing_patch(rev2 增量,r15/timing_patch.py)
+
+设计红线 = 测量步循环零包裹(不碰 _kvwarm_step_busy/monitor/每步路径),只包
+每点/每 stage/一次性调用。benchmark JSON `timing` 块新增 additive 子对象
+`phases`(schema_version 仍 2,下游未知键容忍):
+`dataset_load_s / tokenizer_load_s / kvwarm_plan_s / content_tokenize_s(+
+_buckets 按 kv 深度 4 的幂分桶)/ content_gen_s / seed_total_s /
+import_to_first_bench_activity_s`,每键附 `*_n`(调用数)与 `*_first_s`
+(首调用拆分——content_gen 首调用≈内容池一次性构建)。
+**相位嵌套树(消费方勿平铺求和)**:content_gen ⊃ 池构建 ⊃ dataset_load +
+tokenizer_load;kvwarm.stages[].build_seconds ⊃ content_tokenize。
+既有字段继续负责:kvwarm GPU 预热 = `kvwarm.stages[].build_seconds` 逐段和;
+真正 inference = `timing.measured_iteration_seconds`。四段拼法(collector 侧):
+engine launch = 进程拉起→started_at(外测);kvwarm = stages 和;inference =
+measured;other = elapsed − 顶层互斥相位 − measured。
+零开销验证(2026-08-18,0477z Guaranteed pod,5 boot):带 timing 的两 boot
+在全部 10 坐标落入基线三 boot 包络并居快侧(measured 0.6976/0.6970 vs 基线
+0.6893~0.7205);相位守恒余量 +0.87s;基线臂带内瞬态 +13.7% 系共享节点邻居
+(内存带宽,cgroup 不防),再证正式采集须保留带内 3-boot 中位。
+工装:r15/{timingchk_run.sh,timingchk_seq.sh,timingchk_score.py,
+points_timingchk.json,bake_rev2.sh,k8s_timingchk_pod.yaml}。
+
 ## 3. 已立规格、待实现(不在本镜像)
 
-1. **逐点细分耗时仪表**(提速战役的地图,零测量开销):
-   `results[i].timings = {setup_ms, seed_ms, warmup_ms, measure_ms, teardown_ms}`,
-   顶层 `phase_timings = {engine_boot_s, dataset_load_s, pool_build_s,
-   warmup_total_s, measure_total_s, seed_total_s}`。实现走 boot 期补丁栈验证后
-   再烘焙。
+1. ~~逐点细分耗时仪表~~ **已落地为 rev2 timing_patch(见 §2.1)**,与原规格的
+   差异:不做逐点 timings 数组(逐点 wall 既有),相位粒度按调用位而非逐点。
 2. **每步 cudagraph 模式字段**(每 rank 提议值 + 组同步值)——dep4 双制度
    档案的遥测债。
 3. **每步专家路由直方图**——内容效应机制债。
