@@ -22,7 +22,7 @@ python3 "$WORKDIR/fpm_listener.py" /results/fpm_stream.jsonl >/results/listener.
 # FPM stream on (legacy explicit-port path activates InstrumentedScheduler),
 # benchmark mode off — every real serving step gets published.
 export DYN_FORWARDPASS_METRIC_PORT=20380
-bash "$WORKDIR/serve_run_tep4_prefill.sh" >/results/engine.log 2>&1 &
+bash "$WORKDIR/serve_run_tp4_prefill.sh" >/results/engine.log 2>&1 &
 ENGINE_PID=$!
 
 echo "stack up: etcd+nats+frontend+listener+engine(pid=$ENGINE_PID); waiting for model ready"
