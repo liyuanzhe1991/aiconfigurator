@@ -110,3 +110,16 @@ inference=measured_iteration_seconds;other=余项。守恒 ±5%。
   双计,meta-only 不影响测量。
 - 教训沉淀:验收仗的价值即在此——三个缺陷全是"手工链正确、产品化漂移/
   错杀"类,只有纯官方命令端到端才暴露。
+- [2026-08-18 17:06→19:00] **tep4 修复态正式收官,exit=0,产物全绿**:
+  decode 1659 点(102 warm stages,real_kv 1559 / fake 102 = 94% 真实 KV,
+  fake 仅池不可行巨点,与 r15 制度一致);prefill 9505 点;topo 113.6min
+  (decode cell 82.3 = 预热 72.2 + inference 1.0 + 其他;prefill cell 17.0);
+  parquet 11062 行发布(旧 fake 库隔离于 quarantine_fakeregime_db)。
+- [2026-08-18 19:37] **缺陷4(基建级)**:dep4 prefill cell 引擎侧完整
+  (远程 sha=d342c6d2…,size=52,359,646),取件 3/3 EOFError(gz 断点
+  464/526/546KB)——52MB 撞 teleport exec 流上限(tep4 最大成功件 25.7MB;
+  dep4 dp=4 四 rank 数据翻倍)。cell 记 failed,pod 回收数据丢。runner 的
+  gz+sha+3retry 纪律在但不够。产品语义正确接管:run 尾将按 B2/B3 拒发布+
+  campaign_incomplete+非零退出;恢复走官方 resume(重跑同命令,只补失败
+  cell,顺带端到端验收 resume)。修法建议(follow-up):分块传输(≤16MB/块
+  逐块 sha)或 PVC 出件通道;重试加指数退避。dev session 离线,回线即转达。
