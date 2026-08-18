@@ -1,0 +1,45 @@
+{
+  "aic_revision": "68707ffba3431253f493699c399b81e2534f2018",
+  "backend": "vllm",
+  "backend_version": "0.25.1",
+  "collector_attempt_ids": [
+    "0f12133653d343828c8b64505787a5ae",
+    "5a7cc5e6bc13411bbe2a4a14acf5f93d",
+    "8ee74ead7e9f49c5bcb5c3b7542f4adc",
+    "9b6ba424d1bc480a86b651635ef9ff07",
+    "9e399be977664dd68e8cebffb9f097ed",
+    "e9372a4fff9d4a538272e614ad9b896b"
+  ],
+  "coordinate_system": "iteration_totals_balanced_v1",
+  "measurement_policy": "dynamo_native_single_sample_v1",
+  "measurement_repeats": 1,
+  "model_paths": [
+    "MiniMaxAI/MiniMax-M2.7"
+  ],
+  "parquet_sha256": "e73af313272a3017e1f5a4bd02ff25bbd587b0f0c2a7a23f12fd707705e1c8dd",
+  "row_count": 32797,
+  "runtime_grid_digests": [
+    "15b1e935985f51b253b7c500e5ef96e87fa26c89ace2ebd45e5fa31646a5a880",
+    "513534075a1adaefd9bf0a47f861ece7f8949dce5981be236d544786c91972e3",
+    "5395e3bbb17e80c03899c8fff1e621710a5b1f119133316eb096ca7c0c268c2d",
+    "7c1bd1de8feda9642c0eab7fef763f7c164c68b8e90361e239968f9fa4f8888e",
+    "c8d342ce1997ac9e48be0d296c78ed7fcafb3732079c54a21824f12047c47dae"
+  ],
+  "runtime_run_ids": [
+    "050e543ca56a442f8754970213998ccc",
+    "36fc0fe5d6fd4e7dac5ddccb09172a0d",
+    "424ba638f8344aa6bfcee149fc14d04c",
+    "bed29e3708cb423f96750851eed901ad",
+    "decd918a46194cb1bdfcab3050581d04",
+    "f990fc64f8dc47a4974b34c97691d66f"
+  ],
+  "schema_name": "aic_fpm_forward_perf",
+  "schema_version": 6,
+  "source_plan_sha256": [
+    "2ef4b6dab44937f4b36b8411dc7a37d000953016ab0cb600208f019c3df4215f",
+    "511c5e49d1331154f5839d550d9fbda0758fae8224e36da83dd3e10269a531fd",
+    "76923ff0498bfc2a7b0ef4edbbe06202876bdad750994c2dfbbdd442f9c52b02"
+  ],
+  "system": "h200_sxm",
+  "warmup_repeats": 0
+}
