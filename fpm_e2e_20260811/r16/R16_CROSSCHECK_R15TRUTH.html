@@ -17,4 +17,13 @@ img{max-width:100%;border:1px solid #eee;margin:6px 0}h1{border-bottom:3px solid
 <p><b>2. tep4 decode 的小批段偏快是采集侧真问题</b>(两份独立真值一致指认,幅度 −6~−8% @ b≤32),
 根因=产品缺带内多 boot 中位协议(缺陷6);修法=产品实现多 boot,或该 cell 按 r15 协议重采。</p>
 <p><b>3. 真值环境方差的量级得到标定</b>:同一旧库在 r15 真值 vs 本轮真值间移动 ~1pp,与三-1 的归因一致。</p>
+<h2>附:real-KV vs fake-KV 分段对照(tep4,同真值同口径)</h2>
+<table><tr><th>kv 段</th><th>fake 库(缺陷1 首轮)</th><th>预热库(修复版)</th><th>解读</th></tr>
+<tr><td>&lt;1万</td><td>7.66%(−6.6%)</td><td>7.08%(−7.2%)</td><td>无差:此段病因=单 boot 偏置(缺陷6),两库共享</td></tr>
+<tr><td>1万~10万</td><td>7.95%(−8.7%)</td><td>5.15%(−5.1%)</td><td>预热开始占优</td></tr>
+<tr><td><b>10万~50万</b></td><td><b>7.94%(−8.75%)</b></td><td><b>2.69%(−0.94%)</b></td><td><b>3 倍优势,签名近零——real-KV 的压倒性主场</b></td></tr>
+<tr><td>50万~100万</td><td>4.28%(−3.7%)</td><td><b>1.96%(−0.4%)</b></td><td>2 倍+</td></tr>
+<tr><td>&gt;100万</td><td>3.44%</td><td>4.40%</td><td>无差:预热库巨点亦为 fake 回退(池不可行),两库同源</td></tr></table>
+<p><small>结论:kvwarm 的价值在中大 kv 段完整复现(r14/r15 定罪原样成立);tep4 头条 4.00% 的拖累项
+是小段单 boot 偏置(缺陷6),real-KV 主场已达 2.0-2.7%(r15 品质)。</small></p>
 </body></html>
