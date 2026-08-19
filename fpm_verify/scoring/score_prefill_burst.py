@@ -16,7 +16,7 @@ from aiconfigurator_core.sdk import perf_database
 from aiconfigurator_core.sdk.operations.fpm_forward import FPMForwardOp
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--topo", choices=["tep4", "dep4"], required=True)
+ap.add_argument("--topo", choices=["tep4", "dep4", "tp4"], required=True)
 ap.add_argument("--stream", required=True)
 ap.add_argument("--windows", required=True)
 ap.add_argument("--new-root", required=True)
@@ -35,7 +35,7 @@ def make_query(root, native_identity=False):
     FPMForwardOp.clear_cache()
     cfg = sdk_config.ModelConfig(
         tp_size=(1 if (native_identity and args.topo=='dep4') else 4), pp_size=1, attention_dp_size=(4 if (native_identity and args.topo=='dep4') else 1),
-        moe_tp_size=1, moe_ep_size=4, cp_size=1,
+        moe_tp_size=(4 if args.topo=='tp4' else 1), moe_ep_size=(1 if args.topo=='tp4' else 4), cp_size=1,
         gemm_quant_mode=common.GEMMQuantMode.fp8_block,
         moe_quant_mode=common.MoEQuantMode.fp8_block,
         fmha_quant_mode=common.FMHAQuantMode.bfloat16,
