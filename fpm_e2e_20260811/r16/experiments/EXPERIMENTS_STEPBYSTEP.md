@@ -104,3 +104,18 @@ requests=limits,与产品 cell 同规格)+ nodeAffinity 钉死同一节点。
 dep4 终审(2.42/2.75)、tp4 修复(fixed/fixed_filtered)、tep4 列过滤
 (colfilter)、外推替换(repaired)、全零时代库(randomKV——历史命名,
 实为 all-zero 输入时代,见报告勘误)、r14-native 终审(4.24/1.70 校准)。
+
+## 关于本目录的 *.patch 文件与分支拓扑(防误会)
+
+本分支(fpm-all-20260811)是**实验/文档/验证套件的档案分支**,代码基线
+故意钉在 r15 时代(打分工具链依赖老接口);**产品代码最新 head 在
+PR 栈工作树**(#1473/#1475 链),两边靠 commit 号互引,本分支不合入上游。
+
+- `sdk_fake_fallback_filter.patch`:C1 过滤的可移植 diff——同一改动已
+  直接 commit 在本分支 aic-core(env 门控);供上游 PR 化参考;
+- `collector_kvwarm_meta.patch`:E9 试验当时的 B1 半成品起头,**已被
+  PR 树完整实现取代(f2a2b61b:含 cell 级推导、跨 rank 校验、存档回归、
+  单测)**——仅存证,勿再应用;
+- `../kvwarm_patch/kvwarm_patch.py`:不是 git patch,是 r14/r15 时代给
+  镜像内引擎调度器做现场手术的生成脚本(kvwarm 机制的源码形态),
+  手术结果已烘进 gc-timing/gc-warmtp 镜像;仓库存它为溯源。
