@@ -30,7 +30,7 @@ aiconfigurator 的 FPM(forward-pass model)库,是"GPU 上每个推理调度步
 
 引擎内的 InstrumentedScheduler(已烘入 frozen 镜像;serve 模式只透传
 不改调度)把**每个调度步**发布到 ZMQ 端口(`DYN_FORWARDPASS_METRIC_PORT=20380`,
-DP 拓扑每 rank 一口)。监听器逐行落 `fpm_stream.jsonl`。打分只用五个字段:
+DP 拓扑每 rank 一口)。监听器([`fpm_listener.py`](../../fpm_verify/harvest/tep4/fpm_listener.py),dep4 为多端口版 [`dep4/fpm_listener.py`](../../fpm_verify/harvest/dep4/fpm_listener.py))逐行落 `fpm_stream.jsonl`。打分只用五个字段:
 `dp_rank`、`wall_time`、`scheduled_requests.{num_prefill_requests,
 sum_prefill_tokens, sum_prefill_kv_tokens, num_decode_requests}`。
 
@@ -43,7 +43,7 @@ sum_prefill_tokens, sum_prefill_kv_tokens, num_decode_requests}`。
 固定并发 C、`ignore_eos` 持续生成 → decode 期形成稳定的"池即批";
 kv 每步增长,一窗扫出一条 (C, kv) 射线;多窗多次重复 = 同坐标多票。
 
-驱动为 `decode_driver.py`(kit v2 默认,ShareGPT 真实文本奇数池):
+驱动为 [`decode_driver.py`](../../fpm_verify/harvest/tep4/decode_driver.py)(kit v2 默认,ShareGPT 真实文本奇数池;由 [`phase_decode.sh`](../../fpm_verify/harvest/tep4/phase_decode.sh) 调起,内容池实现见 [`sharegpt_ids.py`](../../fpm_verify/harvest/tep4/sharegpt_ids.py)):
 - prompt 为 ShareGPT 奇数池 token id(与采集侧偶数池零重叠——考卷与
   练习册分离);实验依据:随机内容池会让真值系统性偏快 −1.51%
   (同机 ABA 三遍对拍,漂移对照 −0.14%,手册 E6);
@@ -65,13 +65,13 @@ kv 每步增长,一窗扫出一条 (C, kv) 射线;多窗多次重复 = 同坐标
 > (prefill burst 不受此代差影响——它从 R16 战役起就一直带拦路石与
 > 现场校验,两代同款。)
 
-引擎为 decode-parity 配置:与采集 cell 同镜像、同拓扑、同 kv dtype;
+引擎为 decode-parity 配置([`serve_run_tep4_decode.sh`](../../fpm_verify/harvest/tep4/serve_run_tep4_decode.sh)):与采集 cell 同镜像、同拓扑、同 kv dtype;
 显式 `--no-enable-prefix-caching`(防 bench 请求前缀命中挤占物理 KV 池;
 与采集侧 kvwarm 制度不冲突,r15 实测稳态等价)。
 
 ### 1.3 prefill 真值:burst
 
-`burst_driver.py`:一格 = (bp 路并发 × 每路 n 个新 token × kv 共享前缀),
+[`burst_driver.py`](../../fpm_verify/harvest/tep4/burst_driver.py)(dep4 的 DP 拦路石+镜像门版:[`dep4/burst_driver.py`](../../fpm_verify/harvest/dep4/burst_driver.py)):一格 = (bp 路并发 × 每路 n 个新 token × kv 共享前缀),
 `max_tokens=1`,一次 burst 一窗;先预热前缀进 KV cache(prefill 引擎保持
 prefix caching 开启);单步格现场校验"流里存在恰好 (bp, bp·n, bp·kv) 的步";
 dep 拓扑加四 rank 镜像门(各 rank 同形且 wall 差 ≤3%,不达标换 seed 重试
@@ -79,14 +79,14 @@ dep 拓扑加四 rank 镜像门(各 rank 同形且 wall 差 ≤3%,不达标换 s
 
 ### 1.4 环境门禁(每条都由踩坑实验烙成)
 
-按 `stage_and_run.sh` 的执行序:
+按 [`stage_and_run.sh`](../../fpm_verify/harvest/stage_and_run.sh) 的执行序:
 
 1. **同机协议(最重要)**:真值必须采在与采集**同一台物理机**上——
    `PIN_NODE=<采集时记下的节点名> bash stage_and_run.sh <topo> <ctx>`。
    依据:账面完全相同的健康节点之间,小坐标段测速天然差 4-6%(三节点
    同点单实测;CPU 噪声注入因果复现了该签名,手册 E3/E4)。跨机采的
    真值只作参考口径。实际节点名写入 `/results/nodeName.txt`;
-2. **时钟守卫**:逐卡轻载烤机读 boost 峰值,<1900MHz 整链失败(曾当场
+2. **时钟守卫**([`clock_guard.sh`](../../fpm_verify/harvest/clock_guard.sh)):逐卡轻载烤机读 boost 峰值,<1900MHz 整链失败(曾当场
    抓获锁频病卡造成 +7.65% 假真值)。注意:守卫只能挡病卡,挡不住上述
    节点间离散——守卫通过 ≠ 环境同质;
 3. **staging 完整性**:全部文件 exec-cat 注入 + 双端 sha256(kubectl cp
@@ -94,12 +94,12 @@ dep 拓扑加四 rank 镜像门(各 rank 同形且 wall 差 ≤3%,不达标换 s
 4. **单 nohup 链**:守护进程(etcd/nats/frontend/监听器)必须活在链内,
    exec 会话断链即死;相位切换处有显存排空守卫(轮询 <1GB)与引擎家族
    清杀清单(含 `VLLM::` worker);
-5. **取件**:`fetch_results.sh` 分块 + 逐块 sha + gzip + 断点续传
+5. **取件**:[`fetch_results.sh`](../../fpm_verify/harvest/fetch_results.sh) 分块 + 逐块 sha + gzip + 断点续传
    (teleport 会话级流劣化会静默截断大文件,968MB 实战验证)。
 
 ## 2. 分数是怎么算的(fpm_verify/scoring)
 
-### 2.1 decode(score_decode.py)
+### 2.1 decode([`score_decode.py`](../../fpm_verify/scoring/score_decode.py);r15 原版对照:[`score_t3_decode.py`](../kvwarm_patch/score_t3_decode.py))
 
 真值重建(规则与 r15 时代原版打分器逐字节相同,已交叉校准):
 
@@ -117,7 +117,7 @@ dep 拓扑加四 rank 镜像门(各 rank 同形且 wall 差 ≤3%,不达标换 s
 9. 分层:A=坐标恰在该库网格(纯插值)/B=网格外(泛化)/F=低于网格
    地板的钳位坐标(单列不进主口径)。
 
-### 2.2 prefill(score_prefill_burst.py)
+### 2.2 prefill([`score_prefill_burst.py`](../../fpm_verify/scoring/score_prefill_burst.py);补充口径 [`score_prefill_chunks.py`](../../fpm_verify/scoring/score_prefill_chunks.py))
 
 坐标 = 步的 (bp, 新 token 总数, 复用 KV 总数),对准设计形;dep 按每
 rank 形取票(凑满 DP 个 rank、wall 差 ≤3%,一窗一票取 max);
@@ -140,7 +140,7 @@ r15 时代的手工库把 dep 拓扑发布成 tp 形身份;产品库按原生拓
   (r15 的 1.70% 正是同机同 boot 产物);跨机验证判据 ~5%
   (地板 ±3-4%),或改用多机中位;
 - 库侧已知需排除项:`kv_seed_regime == fake_fallback` 的行(每批量档
-  顶格点,值不可信)——SDK 装载器 `FPM_EXCLUDE_FAKE_FALLBACK=1` 排除,
+  顶格点,值不可信)——SDK 装载器 `FPM_EXCLUDE_FAKE_FALLBACK=1` 排除(实现:[`fpm_forward.py`](../../aic-core/src/aiconfigurator_core/sdk/operations/fpm_forward.py) 的 load_fpm_forward_data,行数见 git blame;collector 写列侧在 PR 树 f2a2b61b),
   实证 tep4 4.00→3.72%、尖刺带 26.5→0.2%(手册 E5/E9)。
 
 ## 4. 快速上手(字面命令)
@@ -182,3 +182,30 @@ FPM_EXCLUDE_FAKE_FALLBACK=1 PYTHONPATH=src:aic-core/src python \
 4. mixed 相位(混布批)窗口照采,但按用户裁定不进主判据;
 5. 顶格坐标(每档最深 ~0.2% kv 区间)在排除 fake_fallback 后无库值,
    查询 fail-closed——这是"不假装知道没测过的区域"的既定语义。
+
+## 附录:机制 → 实现文件总索引(相对本文档路径,GitHub 可点击)
+
+| 机制/规则 | 实现 |
+|---|---|
+| 收割总编排(部署/守卫/staging/单链/相位序/PIN_NODE 同机) | [`fpm_verify/harvest/stage_and_run.sh`](../../fpm_verify/harvest/stage_and_run.sh) |
+| 时钟守卫(1900MHz 轻载闸) | [`clock_guard.sh`](../../fpm_verify/harvest/clock_guard.sh) |
+| 取件(分块 sha/gzip/断点续传) | [`fetch_results.sh`](../../fpm_verify/harvest/fetch_results.sh) |
+| serve 栈(etcd/nats/frontend/监听器/prefill 引擎) | [`tep4/serve_stack.sh`](../../fpm_verify/harvest/tep4/serve_stack.sh) |
+| decode 相编排(引擎切换/驱动选择) | [`tep4/phase_decode.sh`](../../fpm_verify/harvest/tep4/phase_decode.sh) / [`dep4/phase_decode.sh`](../../fpm_verify/harvest/dep4/phase_decode.sh) |
+| decode 真值驱动 v2(ShareGPT/拦路石/锁步校验) | [`tep4/decode_driver.py`](../../fpm_verify/harvest/tep4/decode_driver.py) |
+| prefill burst 驱动(拦路石/现场校验/镜像门) | [`tep4/burst_driver.py`](../../fpm_verify/harvest/tep4/burst_driver.py) / [`dep4/burst_driver.py`](../../fpm_verify/harvest/dep4/burst_driver.py) |
+| prefill/mixed 相编排 | [`tep4/phase_prefill_entry.sh`](../../fpm_verify/harvest/tep4/phase_prefill_entry.sh) / [`tep4/phase_mixed.sh`](../../fpm_verify/harvest/tep4/phase_mixed.sh) |
+| mixed 探针驱动 | [`tep4/mixed_driver.py`](../../fpm_verify/harvest/tep4/mixed_driver.py) |
+| ShareGPT 奇/偶池与确定性取 id | [`tep4/sharegpt_ids.py`](../../fpm_verify/harvest/tep4/sharegpt_ids.py) |
+| 遥测监听器(单口/多口) | [`tep4/fpm_listener.py`](../../fpm_verify/harvest/tep4/fpm_listener.py) / [`dep4/fpm_listener.py`](../../fpm_verify/harvest/dep4/fpm_listener.py) |
+| decode-parity 引擎配置 | [`tep4/serve_run_tep4_decode.sh`](../../fpm_verify/harvest/tep4/serve_run_tep4_decode.sh) |
+| prefill-parity 引擎配置(capture 表/8192 预算) | [`tep4/serve_run_tep4_prefill.sh`](../../fpm_verify/harvest/tep4/serve_run_tep4_prefill.sh) |
+| pod 规格(4×H200/PVC 出件/病节点拉黑) | [`tep4/k8s_deploy.yaml`](../../fpm_verify/harvest/tep4/k8s_deploy.yaml) |
+| decode 打分(五条过滤/配速者/A-B-F/配对) | [`fpm_verify/scoring/score_decode.py`](../../fpm_verify/scoring/score_decode.py) |
+| prefill 打分(burst 口径) | [`score_prefill_burst.py`](../../fpm_verify/scoring/score_prefill_burst.py) |
+| r15 原版打分器(交叉校准对照) | [`kvwarm_patch/score_t3_decode.py`](../kvwarm_patch/score_t3_decode.py) |
+| SDK 排除 fake_fallback 行(C1) | [`aic-core .../fpm_forward.py`](../../aic-core/src/aiconfigurator_core/sdk/operations/fpm_forward.py) |
+| collector 写 kv_seed_regime 列(B1) | PR 树 f2a2b61b:collector/fpm_forward/{native_artifact,database}.py |
+| 采集侧 kvwarm 机制(铺链/借表/倒带/巨点中位) | 引擎补丁源:[`kvwarm_patch/kvwarm_patch.py`](../kvwarm_patch/kvwarm_patch.py)(烘焙于 gc-timing/gc-warmtp 镜像) |
+| 计划表(decode/prefill/mixed 网格) | [`tep4/decode_plan.csv`](../../fpm_verify/harvest/tep4/decode_plan.csv) 等,kit 目录内同名 |
+| 判别实验 E1-E9 全部脚本与原始数据 | [`experiments/`](experiments/)(手册 [`EXPERIMENTS_STEPBYSTEP.md`](experiments/EXPERIMENTS_STEPBYSTEP.md)) |
