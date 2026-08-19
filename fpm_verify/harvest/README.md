@@ -66,3 +66,12 @@ decode 已拆除,PHASES=all 现在恰好各相一遍。
 
 fetch_results.sh 已换成断点续传版:4MB gzip 块、跨次续传(重跑即接着拉)、
 远端增长中文件按同长前缀 sha 定裁。
+
+## 2 卡 kit(R17 新增,2026-08-20)
+
+tep2/tp2/dep2 由 4 卡版派生:引擎并行度减半、pod 2 GPU、结果子路径
+r17_<topo>、decode 容量护栏(tep2/tp2=60万 token、dep2=200万,池减半的
+保守值;超限计划行由驱动运行时跳过并记账)。计划表沿用 4 卡版:decode
+超限行自动跳过;prefill 超池 burst 自然 SHORT(结构不可构造,与 dep4
+先例同语义)。dep2 的每 rank 权重 = attention + 1/2 专家(EP 切分),
+可行性由引擎 boot 判定(observe-don't-predict)。首次使用前建议 GPU 冒烟。

@@ -1,0 +1,134 @@
+{
+ "schema_version": 1,
+ "prefill": [],
+ "decode": [
+  {
+   "batch_size": 8,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 12,
+   "total_kv_read_tokens": 1398096
+  },
+  {
+   "batch_size": 16,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 16,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 20,
+   "total_kv_read_tokens": 1233600
+  },
+  {
+   "batch_size": 20,
+   "total_kv_read_tokens": 1310720
+  },
+  {
+   "batch_size": 20,
+   "total_kv_read_tokens": 2467220
+  },
+  {
+   "batch_size": 32,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 32,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 44,
+   "total_kv_read_tokens": 1125300
+  },
+  {
+   "batch_size": 44,
+   "total_kv_read_tokens": 2250600
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 64,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 100,
+   "total_kv_read_tokens": 1081000
+  },
+  {
+   "batch_size": 100,
+   "total_kv_read_tokens": 1638400
+  },
+  {
+   "batch_size": 100,
+   "total_kv_read_tokens": 2162000
+  },
+  {
+   "batch_size": 128,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 128,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 150,
+   "total_kv_read_tokens": 1034700
+  },
+  {
+   "batch_size": 150,
+   "total_kv_read_tokens": 2069550
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 256,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 300,
+   "total_kv_read_tokens": 1034700
+  },
+  {
+   "batch_size": 300,
+   "total_kv_read_tokens": 2069400
+  },
+  {
+   "batch_size": 512,
+   "total_kv_read_tokens": 1048576
+  },
+  {
+   "batch_size": 512,
+   "total_kv_read_tokens": 2097152
+  },
+  {
+   "batch_size": 513,
+   "total_kv_read_tokens": 1048572
+  },
+  {
+   "batch_size": 513,
+   "total_kv_read_tokens": 2097144
+  },
+  {
+   "batch_size": 600,
+   "total_kv_read_tokens": 1226400
+  },
+  {
+   "batch_size": 600,
+   "total_kv_read_tokens": 2452800
+  },
+  {
+   "batch_size": 900,
+   "total_kv_read_tokens": 1843200
+  },
+  {
+   "batch_size": 1024,
+   "total_kv_read_tokens": 2097152
+  }
+ ]
+}
