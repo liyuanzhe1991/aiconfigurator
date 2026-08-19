@@ -6,6 +6,47 @@ h1{border-bottom:3px solid #76b900;padding-bottom:6px}h2{border-bottom:2px solid
 .pass{color:#2e7d32;font-weight:700}.miss{color:#c62828;font-weight:700}.case{color:#e65100;font-weight:700}
 small{color:#555}code{background:#f5f5f5;padding:1px 5px;border-radius:3px}</style></head><body>
 <h1>R16 验收终版报告 — 纯 AIC 命令端到端</h1><div style="border:2px solid #b45309;background:#fef3c7;padding:10px 14px;margin:10px 0;border-radius:6px"><b>阅读指引(2026-08-20)</b>:第 1~6 章为 08-19 战役当日版本(含当时的临时数字与假设);<b>终审数字与六案判决以第 7 章为准</b>——dep4 decode 2.42%/2.75%(旧值 2.55/2.85 作废);tep4 decode 4.00%(排除毒行 3.72%,缺口=节点异质性+真值内容,非采集回归);tp4 decode 10.43%→修复实证 4.80%;全零输入时代库 9.99%(旧称「随机KV」系勘误)。MD 版 R16_FINAL_REPORT.md 已同步终审。</div>
+<h2>0. 演进总览(自全零输入时代以来的全部改变;外部读者从这里开始)</h2>
+<h3>0.1 测量制度五个时代</h3>
+<table border="1" cellpadding="6" style="border-collapse:collapse">
+<tr><th>时代</th><th>时间</th><th>decode 测量制度</th><th>prefill 输入</th><th>tep4 decode 精度(同一份新真值)</th></tr>
+<tr><td>①全零输入</td><td>~08-12 前</td><td>零上下文 fake 块表</td><td><b>全零 token</b></td><td><b>9.99%</b></td></tr>
+<tr><td>②randtok</td><td>08-12</td><td>同上(fake)</td><td>随机 token</td><td>(未单独建全量库)</td></tr>
+<tr><td>③kvwarm 手工链</td><td>08-13~15</td><td><b>ShareGPT 真实链+影子借表+倒带测量+巨点中位</b>;prefill 真实内容、3-boot 中位</td><td>真实内容</td><td>2.82%(同机口径 <b>1.70%</b>)</td></tr>
+<tr><td>④产品化 R16</td><td>08-18~19</td><td>同③,aic 纯命令复刻</td><td>真实内容</td><td>4.00%(差异=节点抽签)</td></tr>
+<tr><td>⑤终审修复</td><td>08-20</td><td>+pure_tp 走 kvwarm;顶格回退行标记并排除</td><td>同④</td><td>排除后 <b>3.72%</b>;tp4 10.43→<b>4.80%</b></td></tr>
+</table>
+<h3>0.2 全部改变与归属(相对时代①)</h3>
+<table border="1" cellpadding="6" style="border-collapse:collapse">
+<tr><th>改变</th><th>归属模块</th><th>状态</th><th>证据</th></tr>
+<tr><td>prefill 全零→随机→ShareGPT 真实内容</td><td>引擎补丁/镜像</td><td>已烘入</td><td>R15_REPORT</td></tr>
+<tr><td>decode fake→kvwarm 真实链</td><td>引擎补丁/镜像</td><td>已烘 gc-timing</td><td>E5/E7</td></tr>
+<tr><td><b>pure_tp kvwarm 放行(删 moe_tp 错误跳过)</b></td><td>引擎/镜像(A1)</td><td><b>已烘 gc-warmtp-20260820,冒烟放行</b></td><td>E7/E8:−15.3%;10.43→4.80</td></tr>
+<tr><td>pure_tp 渲染撤 prefix-caching pin</td><td>collector 渲染(A2)</td><td>PR 树 defcc285</td><td>warm 谓词前提</td></tr>
+<tr><td>采集全流程产品化(纯 aic 命令)</td><td>collector+generator</td><td>R16 验收通过</td><td>R16_RUNBOOK</td></tr>
+<tr><td>kv_seed_regime 测量制度列进库</td><td>collector v6(B1)</td><td>实现中(#1475)</td><td>E9</td></tr>
+<tr><td>建模侧排除 fake_fallback 毒行</td><td>aic-core SDK(C1)</td><td><b>已入分支</b>(env 门控)</td><td>尖刺 26.5→0.2%</td></tr>
+<tr><td>真值 decode 驱动换 ShareGPT</td><td>fpm_verify(D1)</td><td>已入分支</td><td>E6:−1.51%</td></tr>
+<tr><td>同机协议 PIN_NODE + 判据分层(同机 2%/跨机 ~5%)</td><td>fpm_verify+spec</td><td>已入分支/已修订</td><td>E3/E4:节点 4-6%</td></tr>
+<tr><td>时钟守卫/排空/分块 sha/断点续传门禁</td><td>fpm_verify</td><td>已入分支</td><td>病卡+7.65% 案</td></tr>
+</table>
+<p>实验排除的冤案(不改):拆 cell 架构(+0.21%)、CPU 配额(+0.03%)、多 boot 中位假设。</p>
+<h3>0.3 镜像谱系</h3>
+<table border="1" cellpadding="6" style="border-collapse:collapse">
+<tr><th>镜像</th><th>内容</th><th>状态</th></tr>
+<tr><td>gc-steady 系</td><td>全零输入时代基底</td><td>退役</td></tr>
+<tr><td>gc-steady-randtok(2)-20260812</td><td>+全零→随机输入修复</td><td>退役</td></tr>
+<tr><td>gc-timing-20260818(adcd28a9…8c48)</td><td>+kvwarm/content v4/argsdump/timing 烘焙</td><td>R16 战役用;tep/dep 可用</td></tr>
+<tr><td><b>gc-warmtp-20260820</b><br>(sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424)</td><td>+A1 pure_tp kvwarm 放行(单层手术)</td><td><b>现行推荐;冒烟 23/24 real_kv、+0.08%;tp4 正式重采待点火</b></td></tr>
+</table>
+<h3>0.4 当前精度状态</h3>
+<p>tep4 prefill <b>3.93% PASS</b>;dep4 prefill <b>4.62%</b>;dep4 decode <b>2.42%</b>(产品,优于手工 2.75%);
+tep4 decode 4.00%(排除毒行 <b>3.72%</b>,残差=跨机地板);tp4 prefill <b>4.59%</b>;tp4 decode 10.43%→<b>4.80%</b>。
+2.0% 门槛仅同机口径可判(1.70% 即同机同 boot 产物)。</p>
+<h3>0.5 下一步</h3>
+<p>tp4 正式重采(等用户点火)→ B1 落地 → C1 转正式 → T4 发布(等白名单)→ 上游 PR 合并。挂账:GLM dep8 CUDA assert。</p>
+<hr>
+
 <p><b>H200 × MiniMax-M2.7 四卡全并行</b>(tep4 / dep4 / tp4)+ <b>B200 × GLM-5.2-FP8</b>(tep8)<br>
 <small>2026-08-19 · 代码树 68707ffb(main ⊕ #1473 ⊕ #1475 ⊕ 3 修复)· 镜像 gc-timing-20260818(digest adcd28a9…8c48)· 真值 = fpm_verify 独立套件(ShareGPT 奇数池,parity serving)</small></p>
 

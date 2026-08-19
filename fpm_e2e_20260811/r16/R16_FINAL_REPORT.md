@@ -3,6 +3,65 @@
 树 68707ffb;镜像 gc-timing-20260818 digest adcd28a9…8c48;
 所属 session:`d07354d7-72f0-47a1-aeab-be8fd346e942`)
 
+
+## 零、演进总览(自全零输入时代以来的全部改变;外部读者从这里开始)
+
+本节回答三个问题:相对最早的"全零输入"采集,现在改了什么;每项改变归属
+哪个模块;当前用哪个镜像、精度到了哪。细节均有指针可深挖。
+
+### 0.1 测量制度五个时代
+
+| 时代 | 时间 | decode 测量制度 | prefill 输入 | tep4 decode 精度(同一份新真值) |
+|---|---|---|---|---|
+| ①全零输入 | ~08-12 前 | 零上下文 fake 块表(伪造指针,无真实内容) | **全零 token** | **9.99%** |
+| ②randtok | 08-12 | 同上(fake) | 随机 token(全零→随机修复) | (未单独建全量库) |
+| ③kvwarm 手工链 | 08-13~15(r14/r15) | **ShareGPT 真实文本链 + 影子借表 + 倒带测量 + 巨点中位**;prefill 换真实内容(r15)、带内 3-boot 中位 | 真实内容 | 2.82%(同机口径 **1.70%**) |
+| ④产品化 R16 | 08-18~19 | 同③,全部由 aic 纯命令(collect→build-db)复刻 | 真实内容(DYN_BENCH_PREFILL_CONTENT=sharegpt) | 4.00%(差异=节点抽签,非代码) |
+| ⑤终审修复 | 08-20 | ③④ 之上:pure_tp 也走 kvwarm(原被错误跳过);顶格回退行带制度标记并在建模侧排除 | 同④ | 排除毒行后 **3.72%**;tp4 由 10.43%→**4.80%** |
+
+### 0.2 全部改变与归属(相对时代①)
+
+| 改变 | 归属模块 | 状态 | 证据 |
+|---|---|---|---|
+| prefill 输入全零→随机→ShareGPT 真实内容 | 引擎补丁/镜像 | 已烘入(randtok→content v4) | R15_REPORT;r14 残差分解 |
+| decode fake→kvwarm 真实链(倒带测量、巨点中位、偶数池) | 引擎补丁/镜像 | 已烘入 gc-timing | 缺陷账本、E5/E7 |
+| kvwarm 对 pure_tp 的错误跳过(moe_tp"物理免疫"假设)删除 | 引擎补丁/镜像(A1) | **已烘 gc-warmtp-20260820,冒烟放行** | E7/E8:−15.3% 定罪;10.43→4.80 |
+| pure_tp 渲染撤 --no-enable-prefix-caching pin(A1 联动) | collector 渲染(A2) | PR 树 defcc285 | warm 谓词前提 |
+| 采集全流程产品化(计划/渲染/执行/校验/建库 纯 aic 命令) | collector + generator | R16 验收通过(4 可比 3 优 1 劣) | R16_RUNBOOK 字面命令 |
+| 测量制度标记 kv_seed_regime 进库(real_kv/fake_fallback/skip:*) | collector v6 schema(B1) | 实现中(专职 session,挂 #1475) | E9;推导防误杀陷阱 |
+| 建模侧排除 fake_fallback 行(顶格毒行,×2-3.7 虚高) | aic-core SDK(C1) | **已入分支**(env 门控) | E5/E9:尖刺 26.5→0.2%,巨段 7→3.2% |
+| 真值 decode 驱动 bench-random→ShareGPT 奇数池 | fpm_verify(D1) | 已入分支(bench 可回退) | E6:random 偏快 −1.51% |
+| 同机协议:真值必须与采集同节点(PIN_NODE) | fpm_verify(D2)+ 验收 spec | 已入分支 + 判据修订 | E3/E4:节点间 4-6%,守卫盲区 |
+| 时钟守卫、排空守卫、分块 sha 取件、断点续传 | fpm_verify 门禁 | 已入分支 | 病卡 +7.65% 案;968MB 实战 |
+| 判据分层:同机 2.0% 门 / 跨机 ~5% 参考 | 验收 spec(E) | 已修订 | 三真值 1.70/2.97/2.82 实测 |
+
+不改的(实验排除的冤案):采集拆 cell 架构(锻炼态 +0.21%)、Guaranteed
+CPU 配额(+0.03%)、多 boot 中位作为小批段解释(被节点异质性取代)。
+
+### 0.3 镜像谱系(当前生产用最后一行)
+
+| 镜像 | 内容 | 状态 |
+|---|---|---|
+| gc-steady 系 | 全零输入时代基底 | 退役 |
+| gc-steady-randtok(2)-20260812 | +全零→随机输入修复 | 退役(r14/r15 在其上现场打 kvwarm 补丁) |
+| gc-timing-20260818(digest adcd28a9…8c48) | +kvwarm/content v4/argsdump/timing.phases 烘焙 | R16 战役用;tep/dep 仍可用 |
+| **gc-warmtp-20260820**(digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424) | +A1(pure_tp kvwarm 放行),单层手术,dense/prefix 守卫保留 | **现行推荐;零补丁冒烟 23/24 real_kv、与实验版 +0.08%;tp4 正式重采待点火** |
+
+### 0.4 当前精度状态(终审记分牌摘要)
+
+tep4 prefill **3.93% PASS**;dep4 prefill **4.62%**;dep4 decode **2.42%**
+(终审真值 26.7 万坐标,产品优于手工 2.75%);tep4 decode 4.00%(排除毒行
+**3.72%**,残差=跨机地板,库自身干净);tp4 prefill **4.59%**;tp4 decode
+10.43%→修复实证 **4.80%**(正式重采待点火)。绝对门槛 2.0% 仅同机口径可判
+(③的 1.70% 即同机同 boot 产物)。
+
+### 0.5 下一步(全部等待项)
+
+tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 列落地
+(专职 session)→ C1 转正式(定默认值+Rust 同步)→ T4 正式发布(等白名单
+批准)→ 上游 #1473/#1475 合并(等 maintainer)。挂账:GLM dep8 CUDA assert
+(OPEN_ISSUES 有复现入口)。
+
 ## 一、对齐记分牌(全新真值,fpm_verify 独立套件)
 
 | cell | 判据 | R16 产品库 | r15 手工库(同真值) | 判定 |
