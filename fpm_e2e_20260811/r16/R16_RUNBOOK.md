@@ -142,7 +142,7 @@ A1(kvwarm 删 moe_tp skip)+A2(渲染撤 pin),修复后全网格重采实证 4.80
 defcc285 及之后。等用户点火后执行。**(b) 各批量档 kv 顶格点回退假 KV 形成
 毒行**(虚高 ×2-3.7,插值放大巨段 ~7%):修复=B1(v6 kv_seed_regime 列)+
 C1(SDK FPM_EXCLUDE_FAKE_FALLBACK=1 排除,已入分支)。证据:
-../R16_FINAL_REPORT.md 第 7 章、experiments/EXPERIMENTS_STEPBYSTEP.md E5/E7/E8/E9。
+R16_FINAL_REPORT.md 第 7 章、experiments/EXPERIMENTS_STEPBYSTEP.md E5/E7/E8/E9。
 
 - 缺陷1-3(prefix-caching pin / timeout / 校验器顺序断言):已修
   (8b5d4399/8552f522/68707ffb),随 #1475 走。

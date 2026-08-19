@@ -16,7 +16,7 @@ r15 实战工装收编。每拓扑一个自足 kit(tep4/dep4 逐字节保真,tp4
 
 ## 取件(fetch_results.sh <topo> <ctx> <outdir>)
 
-16MB 分块 + 逐块 sha256 + 整文件 sha 复核(teleport 会话级流劣化记过档:
+4MB 分块 + 逐块 sha256 + 整文件 sha 复核(teleport 会话级流劣化记过档:
 单流大件必截断;>4h 战役在取件前建议重登 tsh)。
 
 ## 口径不变量(勿改)
