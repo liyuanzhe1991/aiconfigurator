@@ -1,5 +1,8 @@
 # R16 判别实验日:逐步复现手册(2026-08-19/20)
 
+> 所属 session:`d07354d7-72f0-47a1-aeab-be8fd346e942`(R16 验收仗判别实验日;
+> 完整过程记录见该 session transcript 与 R16_BATTLE_LOG.md)
+
 本目录 = 六案判决与两项修复实证的全部脚本、点单、pod 规格与关键补丁。
 通用件:`k8s_regime.yaml`(4×H200 pod 模板,病节点拉黑)、时钟守卫
 `fpm_verify/harvest/clock_guard.sh`(1900MHz 轻载闸)、staging 一律
