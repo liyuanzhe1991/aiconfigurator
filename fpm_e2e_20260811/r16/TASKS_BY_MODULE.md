@@ -1,61 +1,76 @@
-# R16 判别实验日修正任务清单(按模块归属)
+# R16 终审后修正任务表(按模块,2026-08-20 用户裁定版)
 
-> 所属 session:`d07354d7-72f0-47a1-aeab-be8fd346e942`(2026-08-19/20,
-> R16 验收仗判别实验日)。每条任务的实证依据见 R16_FINAL_REPORT.html 第 7 章
-> 与 experiments/EXPERIMENTS_STEPBYSTEP.md(E1~E9)。
-> 用户裁定记录:C 组只保留 C1;老库 backfill 暂缓;nodeName 记录与机器层
-> 结论不归 aic(归验证方法论/工作记忆);真值与采集必须同机。
+> 所属 session:`d07354d7-72f0-47a1-aeab-be8fd346e942`。
+> 每项均有实验实证背书,证据指针:R16_FINAL_REPORT.html 第 7 章、
+> experiments/EXPERIMENTS_STEPBYSTEP.md(E1-E9)、r16/scores/*.csv.gz。
+> 本表是分工派单的唯一权威版本(v2,取代 4c8ef871 的 v1);裁撤项列在文末,不要复活。
+> 分工现状:B1 已派单(由本 session 承接实现);A 组由 merge-test session 承接;
+> C1 已实现入分支;D 组已全部完成(3dbc65e8/a2e5056a/6040ecbc),**勿重做**。
 
-## 一、引擎/镜像(dynamo-fpm kvwarm 补丁层 → 烘新 frozen 镜像)
+## A. 引擎/镜像(dynamo-fpm kvwarm 补丁层)
 
-| ID | 任务 | 实证 | 状态 |
-|---|---|---|---|
-| A1 | kvwarm 谓词删 `elif not ep_enabled: skip`(moe_tp 放行;dense 的 skip 保留) | E7:同机 fake/warm −15.3%;E8:tp4 全网格 10.43%→4.80% | sed 版已验证;待改补丁源码 + 烘镜像 |
-| A2 | 渲染联动:pure_tp decode cell 撤 `--no-enable-prefix-caching` pin(warm-eligible 拓扑全开 prefix caching;缺陷1 条件化的修订) | warm 谓词前提;E7/E8 均以此运行 | 待 PR(渲染代码在 collector runner) |
+**A1|kvwarm 删 moe_tp skip**
+`_kvwarm_warm_eligible` 里 `elif not ep_enabled: skip("moe_tp_balanced_by_construction")`
+分支删除(dense 的 skip 保留——dense 无 expert,真物理免疫)。
+实证:同机 fake/warm 24 点 −15.3%(E7);全网格重采 tp4 decode 10.43%→4.80%
+(E8,含中段 12%→3.8%、巨段 1.51%)。交付=烘进正式镜像。
 
-## 二、collector(aic 仓库 `collector/fpm_forward/`,挂 #1475 v6 schema 链)
+**A2|渲染撤 pure_tp 的 prefix-caching pin(A1 联动)**
+缺陷1 条件化修复把 pure_tp 归入"禁 prefix caching"侧;开 warm 后 tp4 必须
+prefix caching ON(warm 谓词前提)。渲染规则改为"warm-eligible 拓扑全开"。
+没有 A2,A1 无效。位置:collector fpm_forward runner 的引擎参数渲染。
 
-| ID | 任务 | 实证 | 状态 |
-|---|---|---|---|
-| B1 | v6 加 `kv_seed_regime` 列:`native_artifact.py` 暴露 kvwarm 元数据(补丁已写:experiments/collector_kvwarm_meta.patch)+ `database.aggregate_cell` 行推导。**推导必须结合 cell 级 skip_reason**——warm-ineligible 拓扑(如 tp4 旧采)逐点标记全是 fake_fallback,只看点标会误杀整库(实测 1659/1659 全中) | E9 回填版全链验证 | 元数据补丁已写;行推导待写;待 PR |
+## B. collector(挂 #1473/#1475 PR 链)
 
-已裁撤:~~B2 老库 backfill 工具~~(用户:暂时不用);~~B3 manifest 记
-nodeName~~(用户:不让 aic 做,归验证侧自记);~~B4 planner 顶格回撤~~
-(被"记录+排除"路线替代)。
+**B1|v6 schema 加 `kv_seed_regime` 列**(派单已发)
+- native_artifact.py:NativeCollection 增 `kvwarm_meta`(rank payload 顶层
+  "kvwarm" 块;跨 rank 校验 warm_eligible/skip_reason 一致);半成品 diff:
+  experiments/collector_kvwarm_meta.patch;
+- database.py aggregate_cell:每行推导 kv_seed_regime——
+  **cell 级 skip_reason 非空 → `skip:<reason>` 优先**;否则点级
+  kvwarm_real_kv→`real_kv` / kvwarm_fake_fallback→`fake_fallback`;
+  无元数据→legacy;prefill→`n/a`。
+  【实测陷阱】warm-ineligible 拓扑的逐点标记全部是 fake_fallback
+  (tp4 1659/1659),点级判定必须让位于 cell 级,否则下游误杀整库;
+- write_formal_database:加性列(不进 _ROW_KEY),老行合并为 null,
+  验证 pyarrow 混合行写出与 row_count 校验;
+- 验收:存档回归 76923ff0498bfc2a(tep4:decode 102 fallback/其余 real)、
+  511c5e49d1331154(tp4:全 skip:moe_tp_balanced_by_construction);
+  collector 单测全绿;遵守 layer_permissions(记录是数据,collector 不过滤)。
 
-## 三、aic-core SDK(`aic-core/src/aiconfigurator_core/sdk/operations/fpm_forward.py`)
+## C. aic-core SDK(modeling)
 
-| ID | 任务 | 实证 | 状态 |
-|---|---|---|---|
-| C1 | 装载器排除 `kv_seed_regime == fake_fallback` 行(加载后、建插值索引前;9 行) | E9:tep4 4.00→3.72 / 2.82→2.50,tp4 终态 4.80,MAX 60.7→16.5;快路径无损 | **已实现入分支**(env 门控 `FPM_EXCLUDE_FAKE_FALLBACK`);转正式定默认值时 Rust 移植同步 |
+**C1|装载器排除 `kv_seed_regime == "fake_fallback"` 行**(唯一保留的 modeling 项)
+已实现入分支(fpm_forward.py load_fpm_forward_data,env 门控
+`FPM_EXCLUDE_FAKE_FALLBACK=1`,加载后建索引前过滤,内存自洽不掉慢路径)。
+实证:tep4 4.00→3.72 / 2.82→2.50,尖刺带 26.5→0.2%,覆盖代价 1.4-1.5%
+顶格坐标(物理不可温区,fail-closed)。转正式:定默认值 + Rust 移植同步。
+注意:`skip:*` 行保留(拓扑级合法制度),只排 fake_fallback。
 
-已裁撤(用户:只保留 C1):~~C2 上边缘查询语义~~(维持现状 fail-closed,
-排除后顶格上方 1.4~1.5% 坐标无数据即无数据);~~C3 平滑性验尸闸~~;
-~~C4 插值档选择 bug~~;~~C5 单列 Rust 项~~(并入 C1)。
+## D. fpm_verify(验证方,已自理完成大半)
 
-## 四、fpm_verify(验证套件,本人域,不在 aic wheel)
+- D1 ✅ decode 真值驱动默认 ShareGPT(decode_driver.py,`L3_DECODE_DRIVER=bench`
+  回退;v3 九列窗口,isl==1 锁步校验)——实证依据:random 池偏快 −1.51%(E6);
+- D2 ✅ 同机协议:`PIN_NODE=<采集节点> bash stage_and_run.sh ...`,nodeName
+  落产物;跨机 ±3-4% 地板只作参考(E3/E4 定案);
+- D3 ✅ fetch_results.sh 断点续传+gzip 块收编(a2e5056a:4MB gzip 块+跨次续传+增长文件前缀定裁);
+- D4 ✅ dep4 kit phase_mixed 尾链双跑隐患已拆。
 
-| ID | 任务 | 实证 | 状态 |
-|---|---|---|---|
-| D1 | kit decode 真值驱动换 ShareGPT 版(奇数池 token 直发 + DP 拦路石 + isl==1 锁步校验,v3 窗口;保留 bench-random 回退开关) | E6:random 池偏快 −1.51%(ABA,漂移对照 ×10 信噪) | 驱动与 phase 改造已写好,**本地未提交待用户点头**;GPU 未验证,下次收割冒烟先行 |
-| D2 | **同机协议**:采集开跑时自记 cell pod nodeName;收割 `PIN_NODE=<node>` 钉同节点;nodeName 落 /results/nodeName.txt | E3/E4:健康节点间 4-6%,守卫盲区;CPU 争抢因果复现 | **已实现并推送**(6040ecbc) |
-| D3 | fetch_results.sh 收编断点续传 + gzip 小块(968MB 实战版) | dep4 取件两次断点实战 | 待收编(同 D1 一批) |
-| D4 | dep4 kit PHASES=all 双跑 decode 隐患(phase_mixed 尾链拆除) | 提读时发现 | 改动已写好,**同 D1 待点头** |
+## E. 验收协议(spec)
 
-## 五、验收协议(spec 文档,本人)
+decode ≤2.0% 门槛绑定"采集与真值同机"条件;跨机验证判据 ~5%(地板 ±3-4%)。
+依据:r15 的 1.70% 为同机同 boot 产物;三节点探针 + 噪声注入因果(E3/E4)。
 
-| ID | 任务 | 状态 |
-|---|---|---|
-| E1 | 门槛绑定节点条件:同机判 2.0%,跨机只作参考(±3-4% 地板);写入 R16_ACCEPTANCE_SPEC/VERIFY_RUNBOOK | 待写 |
+## 裁撤/暂缓(用户拍板,勿复活)
 
-## 六、挂账(不阻塞,均有档)
+- B2 老库 backfill 工具(暂缓;逻辑已验证,见 E9);
+- nodeName 记录进 aic manifest(机器域信息归验证方自记,不入 aic);
+- C2 上边缘查询语义扩展(维持 fail-closed 现状)、C3 平滑性验尸闸、
+  C4 插值档选择案、C5 单独排期的 Rust 项(并入 C1 转正式);
+- B4 planner 顶格点回撤/引擎跳过路线(被「记录+排除」路线替代)。
 
-- GLM dep8 decode CUDA device-side assert(b=497/kv=763k,DSA 架构疑点;复现入口在 OPEN_ISSUES);
-- tp4 正式库重采:等 A1 进镜像后走纯产品链(本次实验库为节点C 单机产物,仅作修复实证);
-- dep4 b=34/100/101 误差口袋(~0.5pp);
-- T4 正式发布(等用户批白名单)、上游 PR #1473/#1475 合并(等 maintainer)。
+## 挂账(不阻塞本批)
 
-## 依赖关系(动工顺序)
-
-A1 → A2(渲染跟引擎走)→ 烘镜像 → tp4 正式重采;B1 → C1 转正式
-(列先存在,过滤才有依据);D 组与 E1 独立,随时可做。
+GLM dep8 decode CUDA device-side assert(复现入口见 OPEN_ISSUES.md);
+tp4 正式库重采(等 A1 镜像后走纯产品链);dep4 b=34/100/101 口袋(~0.5pp);
+T4 正式发布(等用户批白名单);上游 #1473/#1475 合并(等 maintainer)。
