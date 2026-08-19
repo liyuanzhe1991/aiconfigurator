@@ -29,12 +29,12 @@ ap.add_argument("--backend-version", default="0.25.1")
 args = ap.parse_args()
 DP = 4 if args.topo == "dep4" else 1
 
-def make_query(root):
+def make_query(root, native_identity=False):
     perf_database.set_systems_paths([root])
     db = perf_database.get_database(args.system, args.backend, args.backend_version)
     FPMForwardOp.clear_cache()
     cfg = sdk_config.ModelConfig(
-        tp_size=4, pp_size=1, attention_dp_size=1,
+        tp_size=(1 if (native_identity and args.topo=='dep4') else 4), pp_size=1, attention_dp_size=(4 if (native_identity and args.topo=='dep4') else 1),
         moe_tp_size=1, moe_ep_size=4, cp_size=1,
         gemm_quant_mode=common.GEMMQuantMode.fp8_block,
         moe_quant_mode=common.MoEQuantMode.fp8_block,
