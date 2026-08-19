@@ -55,14 +55,7 @@ tep4 prefill **3.93% PASS**;dep4 prefill **4.62%**;dep4 decode **2.42%**
 10.43%→修复实证 **4.80%**(正式重采待点火)。绝对门槛 2.0% 仅同机口径可判
 (③的 1.70% 即同机同 boot 产物)。
 
-### 0.5 下一步(全部等待项)
-
-tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 列落地
-(专职 session)→ C1 转正式(定默认值+Rust 同步)→ T4 正式发布(等白名单
-批准)→ 上游 #1473/#1475 合并(等 maintainer)。挂账:GLM dep8 CUDA assert
-(OPEN_ISSUES 有复现入口)。
-
-### 0.6 现行采集的 KV 预热机制(prefill/decode 分述)
+### 0.5 现行采集的 KV 预热机制(prefill/decode 分述)
 
 核心差别一句话:**decode 的预热是"造一批真实内容的 KV 给它读",prefill 的
 预热是"喂真实文本给它算 + 预铺它要复用的前缀"。**
@@ -98,6 +91,13 @@ tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 
 **共用纪律**:内容池偶/奇分仓(采集偶数池、真值验证奇数池,零重叠);
 引擎必须开 prefix caching(链续深与前缀预铺的物理前提);每点测量制度
 (real_kv/fake_fallback/skip 原因)逐点入产物,B1 后进 parquet 列可审计。
+
+### 0.6 下一步(全部等待项)
+
+tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 列落地
+(专职 session)→ C1 转正式(定默认值+Rust 同步)→ T4 正式发布(等白名单
+批准)→ 上游 #1473/#1475 合并(等 maintainer)。挂账:GLM dep8 CUDA assert
+(OPEN_ISSUES 有复现入口)。
 
 ## 一、对齐记分牌(全新真值,fpm_verify 独立套件)
 

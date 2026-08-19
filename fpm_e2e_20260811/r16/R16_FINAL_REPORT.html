@@ -44,7 +44,7 @@ small{color:#555}code{background:#f5f5f5;padding:1px 5px;border-radius:3px}</sty
 tep4 decode 4.00%(排除毒行 <b>3.72%</b>,残差=跨机地板);tp4 prefill <b>4.59%</b>;tp4 decode 10.43%→<b>4.80%</b>。
 2.0% 门槛仅同机口径可判(1.70% 即同机同 boot 产物)。</p>
 
-<h3>0.6 现行采集的 KV 预热机制(prefill/decode 分述)</h3>
+<h3>0.5 现行采集的 KV 预热机制(prefill/decode 分述)</h3>
 <p>核心差别:<b>decode 的预热是「造一批真实内容的 KV 给它读」,prefill 的预热是「喂真实文本给它算 + 预铺它要复用的前缀」。</b></p>
 <p><b>decode(kvwarm 主体)</b>——decode 步要读 past-KV 生成 token,测量前池中必须真实存在该 KV 且内容为真(内容假则 MoE 路由假,实测偏差 −8~−15%):</p>
 <ol>
@@ -56,7 +56,7 @@ tep4 decode 4.00%(排除毒行 <b>3.72%</b>,残差=跨机地板);tp4 prefill <b>
 <p>适用:MoE 拓扑(EP 系;08-20 起 pure_tp 放行=A1/gc-warmtp);dense 跳过(内容不敏感)。</p>
 <p><b>prefill(两处内容保真)</b>——计算本身无需预造 KV,但:①被测请求输入=ShareGPT 真实文本(240 万 token 扁平池,确定性取窗;历史:全零→随机→真实);②kv&gt;0 坐标先用真实内容把复用前缀实际 prefill 进 cache(prefix caching 驻留),被测步读到真内容。外加两相同款 5 轮 warmup 迭代。</p>
 <p><b>共用纪律</b>:内容池偶/奇分仓(采集/验证零重叠);必须开 prefix caching;每点测量制度逐点入产物(B1 后进 parquet 列)。</p>
-<h3>0.5 下一步</h3>
+<h3>0.6 下一步</h3>
 <p>tp4 正式重采(等用户点火)→ B1 落地 → C1 转正式 → T4 发布(等白名单)→ 上游 PR 合并。挂账:GLM dep8 CUDA assert。</p>
 <hr>
 
