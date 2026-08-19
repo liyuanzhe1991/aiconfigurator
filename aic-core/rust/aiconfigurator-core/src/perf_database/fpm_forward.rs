@@ -1513,9 +1513,10 @@ pub(crate) mod tests {
         assert_eq!(table.excluded_fake_fallback_rows().unwrap(), 1);
     }
 
-    /// Only the exact `fake_fallback` marker excludes. The collector's full
-    /// value vocabulary — `real_kv` chain-seeded rows, `skip:<reason>`
-    /// topology markers, prefill `n/a`, and nulls (column present) — stays.
+    /// Only the exact `fake_fallback` marker excludes. The rest of the
+    /// collector's six-state vocabulary — `real_kv` chain-seeded rows,
+    /// `skip:<reason>` topology markers, prefill `n/a`, re-aggregated
+    /// pre-column rows marked `legacy`, and nulls (column present) — stays.
     #[test]
     fn skip_markers_chain_names_and_nulls_are_kept() {
         let tmp = tempfile::tempdir().expect("tmpdir");
@@ -1524,6 +1525,9 @@ pub(crate) mod tests {
         rows[5].kv_seed_regime = Some("skip:moe_tp_balanced_by_construction");
         rows[6].kv_seed_regime = Some("real_kv");
         // rows[7] stays None -> written as a null in the present column.
+        // The sole b=16 decode row: wrongly excluding "legacy" would shrink
+        // the decode domain's batch axis and fail the assertion below.
+        rows[8].kv_seed_regime = Some("legacy");
         write_pair(tmp.path(), &rows);
         let table = loaded_table(tmp.path());
         let cells = table.cells().expect("must load");
