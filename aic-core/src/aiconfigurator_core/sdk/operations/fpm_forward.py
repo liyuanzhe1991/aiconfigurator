@@ -317,6 +317,17 @@ def load_fpm_forward_data(primary_path: str, expected_version: str, expected_sys
         raise ValueError(
             f"FPM row_count mismatch: sidecar={metadata.get('row_count')!r} actual={len(rows)}: {primary_path}"
         )
+    # Opt-in trust gate (experiment): rows measured under the kvwarm
+    # fake-fallback regime are excluded from modeling. Rows lacking the
+    # column (legacy libraries) and topology-level skips ("skip:*") pass.
+    if os.environ.get("FPM_EXCLUDE_FAKE_FALLBACK") == "1":
+        kept = [r for r in rows if r.get("kv_seed_regime") != "fake_fallback"]
+        if len(kept) != len(rows):
+            print(
+                f"fpm_forward: excluded {len(rows) - len(kept)} fake_fallback row(s) "
+                f"from {primary_path}"
+            )
+        rows = kept
     if not rows:
         raise ValueError(f"FPM database contains no rows: {primary_path}")
 

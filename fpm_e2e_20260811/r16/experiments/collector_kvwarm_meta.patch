@@ -1,0 +1,14 @@
+diff --git a/collector/fpm_forward/native_artifact.py b/collector/fpm_forward/native_artifact.py
+index 34bcc001..8ff12727 100644
+--- a/collector/fpm_forward/native_artifact.py
++++ b/collector/fpm_forward/native_artifact.py
+@@ -35,6 +35,9 @@ class NativeCollection:
+     collector_attempt_id: str
+     runtime_run_id: str
+     runtime_grid_digest: str
++    # Engine-reported KV warm-up envelope (warm_eligible/skip_reason/...);
++    # None only for artifacts predating the kvwarm-enabled runtime.
++    kvwarm_meta: dict[str, Any] | None = None
+ 
+ 
+ def _validate_collector_provenance(
