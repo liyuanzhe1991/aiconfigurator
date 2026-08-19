@@ -57,8 +57,19 @@ tep4 decode 4.00%(排除毒行 <b>3.72%</b>,残差=跨机地板);tp4 prefill <b>
 <p><b>prefill(两处内容保真)</b>——计算本身无需预造 KV,但:①被测请求输入=ShareGPT 真实文本(240 万 token 扁平池,确定性取窗;历史:全零→随机→真实);②kv&gt;0 坐标先用真实内容把复用前缀实际 prefill 进 cache(prefix caching 驻留),被测步读到真内容。外加两相同款 5 轮 warmup 迭代。</p>
 <p><b>耗时侧注</b>:预热开销几乎全在 decode——铺链量=档数×网格深度(~1600 万 token,占战役总耗时 ~46%);prefill 前缀预铺只覆盖 kv 档位集合(~16 档、最大 ~10 万 token,逐档一次全体共享),预铺与被测同为 prefill 可顺带完成,输入内容替换零计算成本——prefill 预热近乎免费。逐相耗时见 R16_RUNBOOK.md。</p>
 <p><b>共用纪律</b>:内容池偶/奇分仓(采集/验证零重叠);必须开 prefix caching;每点测量制度逐点入产物(B1 后进 parquet 列)。</p>
-<h3>0.6 下一步</h3>
-<p>tp4 正式重采(等用户点火)→ B1 落地 → C1 转正式 → T4 发布(等白名单)→ 上游 PR 合并。挂账:GLM dep8 CUDA assert。</p>
+<h3>0.6 进行中与等待中的工作(实时看板,2026-08-20 晚更新)</h3>
+<table border="1" cellpadding="6" style="border-collapse:collapse">
+<tr><th>事项</th><th>归属</th><th>状态</th><th>前置/备注</th></tr>
+<tr><td><b>B1:kv_seed_regime 列进库</b></td><td>collector(#1475)</td><td><b>代码已落 PR 树</b>(f2a2b61b:cell 级 skip_reason 优先、跨 rank 一致性校验、加性列显式 null 归一;存档回归 tep4 1455/102、tp4 全 skip:*;+218 行单测)</td><td>待随 #1475 合入上游</td></tr>
+<tr><td><b>B4:fallback 点跳过+记账(复活)</b></td><td>引擎/collector</td><td>设计定型中——GLM dep8 崩溃案投复活票,动机从精度升级为<b>正确性</b>(GLM 上 fake 路径直接 device assert 炸死采集)</td><td>planner 顶格回撤与引擎 skip 二选一或并用</td></tr>
+<tr><td><b>修法②:vocab 越界消雷</b></td><td>引擎/镜像</td><td><b>已烘 gc-vocabfix-20260820</b>(基底 gc-warmtp + 运行时读 vocab_size 双位点替换)</td><td>M2.7 行为面冒烟中</td></tr>
+<tr><td>GLM dep8/tp8 重试</td><td>采集执行</td><td>排队</td><td>前置=vocabfix 双修镜像 + B4 + 深夜复现盖章(盖章须用旧镜像 gc-timing)</td></tr>
+<tr><td><b>tp4 正式重采</b></td><td>采集执行</td><td><b>前置全齐,等用户点火</b></td><td>gc-warmtp + A2(defcc285);RUNBOOK §3 换 tag</td></tr>
+<tr><td>C1 转正式</td><td>aic-core SDK</td><td>env 门控版已入分支</td><td>定默认值 + Rust 同步,随 B1 批</td></tr>
+<tr><td>GLM assert 机制链</td><td>诊断</td><td><b>已升格排他结论</b>:垃圾 KV × GLM 数值病 → NaN → 采样垃圾索引 → embedding 越界</td><td>复现盖章排深夜档;OPEN_ISSUES 有案卷</td></tr>
+<tr><td>T4 发布 / 上游 PR 合并</td><td>发布/上游</td><td>等白名单批准 / 等 maintainer</td><td>—</td></tr>
+</table>
+<p>已完结不再列:文档终审批、六案判决、A1 镜像、D 组 kit、dep4 终审。分工权威版=TASKS_BY_MODULE.md(活文档)。</p>
 <hr>
 
 <p><b>H200 × MiniMax-M2.7 四卡全并行</b>(tep4 / dep4 / tp4)+ <b>B200 × GLM-5.2-FP8</b>(tep8)<br>

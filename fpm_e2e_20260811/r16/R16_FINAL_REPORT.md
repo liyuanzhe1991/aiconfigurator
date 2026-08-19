@@ -99,12 +99,22 @@ kv 档位集合(~16 个档、最大 ~10 万 token,逐档一次全体共享),且�
 引擎必须开 prefix caching(链续深与前缀预铺的物理前提);每点测量制度
 (real_kv/fake_fallback/skip 原因)逐点入产物,B1 后进 parquet 列可审计。
 
-### 0.6 下一步(全部等待项)
+### 0.6 进行中与等待中的工作(实时看板,2026-08-20 晚更新)
 
-tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 列落地
-(专职 session)→ C1 转正式(定默认值+Rust 同步)→ T4 正式发布(等白名单
-批准)→ 上游 #1473/#1475 合并(等 maintainer)。挂账:GLM dep8 CUDA assert
-(OPEN_ISSUES 有复现入口)。
+| 事项 | 归属 | 状态 | 前置/备注 |
+|---|---|---|---|
+| **B1:kv_seed_regime 列进库** | collector(#1475 链) | **代码已落 PR 树**(f2a2b61b:cell 级 skip_reason 优先推导、DP 跨 rank 一致性校验、加性列合并显式 null 归一;存档回归过:tep4 1455 real/102 fallback,tp4 全 skip:*;+218 行单测) | 待随 #1475 链合入上游 |
+| **B4:fallback 点跳过+记账(复活)** | 引擎/collector | 设计定型中——原被「记录+排除」替代而裁撤,**GLM dep8 崩溃案投复活票,动机从精度升级为正确性**(GLM 上 fake 路径不产毒行而是直接 device assert 炸死采集) | 与 A 组同域;planner 顶格回撤与引擎 skip 二选一或并用 |
+| **修法②:vocab 越界消雷** | 引擎/镜像 | **已烘 `gc-vocabfix-20260820`**(基底 gc-warmtp + 缓存化 _bench_vocab_hi() 运行时读 model vocab_size,双位点替换;kvwarm/timing/moetp 标记原封) | M2.7 行为面冒烟中 |
+| **GLM dep8/tp8 重试** | 采集执行 | 排队 | 前置=gc-vocabfix 双修镜像 + B4 落地 + 深夜复现盖章(**盖章必须用旧镜像 gc-timing-20260818**——新镜像已消雷复现不出) |
+| **tp4 正式重采** | 采集执行 | **前置全齐,等用户点火** | gc-warmtp 镜像(冒烟放行)+ A2 渲染(defcc285);按 RUNBOOK §3 换镜像 tag |
+| C1 转正式 | aic-core SDK | env 门控版已入分支 | 定默认值 + Rust 移植同步,随 B1 合并批 |
+| GLM dep8 assert 机制链 | 诊断 | **已升格排他结论**:垃圾 KV × GLM 数值病 → NaN → 采样垃圾索引 → embedding 越界(词表 154880);复现盖章排深夜档 | OPEN_ISSUES 有完整案卷 |
+| T4 正式发布 / 上游 #1473/#1475 合并 | 发布/上游 | 等用户批白名单 / 等 maintainer | — |
+
+已完结不再列:文档终审批、六案判决、A1 镜像、D 组 kit、dep4 终审。分工与
+裁撤的权威版本始终以 `TASKS_BY_MODULE.md` 为准(活文档,更新最勤)。
+
 
 ## 一、对齐记分牌(全新真值,fpm_verify 独立套件)
 
