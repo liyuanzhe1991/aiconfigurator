@@ -71,6 +71,7 @@ BUDGET = 8192
 for (grp, bp, n, kv), g in bw.groupby(["grp", "bp", "n", "kv"]):
     single = n <= BUDGET
     meas = []
+    long_steps = {}   # 长请求 chunk 坐标 -> 跨 rep 的 wall 列表(取中位,滤首遇编译卡顿)
     for r in g.itertuples():
         for s in stream[int(r.s0):int(r.s1)]:
             if not s or s["num_decode_requests"] > 0:
@@ -80,13 +81,14 @@ for (grp, bp, n, kv), g in bw.groupby(["grp", "bp", "n", "kv"]):
                            and s["sum_prefill_kv_tokens"] == bp * kv):
                 meas.append(s["wall"])
             elif not single and s["num_prefill_requests"] == bp and s["sum_prefill_tokens"] <= BUDGET * bp:
-                # 长请求:逐 chunk 步按各自坐标计入(独立评分单元)
-                mm = q_pre(bp, s["sum_prefill_tokens"], s["sum_prefill_kv_tokens"])
-                if mm:
-                    st = "A" if (bp, s["sum_prefill_tokens"], s["sum_prefill_kv_tokens"]) in pre_grid else "B"
-                    rows.append(dict(phase="prefill", stratum=st, bp=bp, n=s["sum_prefill_tokens"],
-                                     kv=s["sum_prefill_kv_tokens"], Bd=0, meas=s["wall"], model=mm,
-                                     mult=1.0, src="长请求步"))
+                long_steps.setdefault((s["sum_prefill_tokens"], s["sum_prefill_kv_tokens"]), []).append(s["wall"])
+    for (tot, kvt), walls in long_steps.items():
+        mm = q_pre(bp, tot, kvt)
+        if mm:
+            st = "A" if (bp, tot, kvt) in pre_grid else "B"
+            rows.append(dict(phase="prefill", stratum=st, bp=bp, n=tot, kv=kvt, Bd=0,
+                             meas=float(np.median(walls)), model=mm, mult=1.0,
+                             src=f"长请求步n={len(walls)}"))
     if single and meas:
         med = float(np.median(meas))
         mm = q_pre(bp, bp * n, bp * kv)
@@ -102,6 +104,7 @@ try:
 except FileNotFoundError:
     dw = pd.DataFrame()
 for r in dw.itertuples():
+    seq = []      # 扫段内按序步列表(每坐标只路过一次,邻居即近似重复样本)
     seen = set()
     for s in stream[int(r.s0):int(r.s1)]:
         if not s or s["num_prefill_requests"] > 0 or s["num_decode_requests"] != r.C:
@@ -110,11 +113,20 @@ for r in dw.itertuples():
         if kvt in seen:
             continue
         seen.add(kvt)
+        seq.append((kvt, s["wall"]))
+    # 坐标真值 = 邻域 ±20 步滚动中位("邻居即副本":扫段每坐标只路过一次,
+    # 但 latency 对 kv 在 ±C 粒度平滑,邻居等价于同点重复测量)。单步级计时
+    # 位移(借-还伪影、孤立 stall)任何幅度都被中位消化;真实结构(误差带/
+    # 口袋/悬崖)是持续多步的平台,滚动中位完整保留。
+    walls = np.array([w for _, w in seq])
+    for i, (kvt, _) in enumerate(seq):
+        lo = max(0, i - 20); hi = min(len(seq), i + 21)
+        wall = float(np.median(walls[lo:hi]))
         mm = q_dec(r.C, kvt)
         if mm:
             st = "A" if (r.C, kvt) in dec_grid else "B"
             rows.append(dict(phase="decode", stratum=st, bp=0, n=0, kv=kvt, Bd=r.C,
-                             meas=s["wall"], model=mm, mult=1.0, src=r.kind))
+                             meas=wall, model=mm, mult=1.0, src=r.kind))
 
 # ---------------- MIXED (pool windows) ----------------
 try:

@@ -7,6 +7,8 @@ import asyncio
 import csv
 import json
 import random
+
+import sharegpt_ids
 import sys
 import time
 
@@ -16,6 +18,9 @@ PLAN, STREAM, OUT, KVP_MODE = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 URL = "http://127.0.0.1:8000/v1/completions"
 MODEL = "MiniMaxAI/MiniMax-M2.7"
 REPS = 15
+# probe 盐必须全局唯一:同 salt 的探针 token 序列跨 Bd/跨调用重复,会被引擎
+# prefix cache 整段命中,坐标塌成 (16, chunk-16)(tep4 战役 zero 模式 27/51 窗阵亡)
+NONCE = int(time.time())
 
 def lines():
     try:
@@ -27,7 +32,7 @@ def lines():
 PFX = {}
 def prefix_ids(kv):
     if kv not in PFX:
-        PFX[kv] = random.Random(50_000 + kv).choices(range(1, 199000), k=kv)
+        PFX[kv] = sharegpt_ids.ids((50_000 + kv), kv)
     return PFX[kv]
 
 async def post(s, ids, max_tokens=1):
@@ -54,12 +59,12 @@ async def main():
             for k in range(REPS):
                 if bp == 1:
                     ids = (prefix_ids(pfl) if pfl else []) + \
-                          random.Random(ri * 999 + k).choices(range(1, 199000), k=chunk)
+                          sharegpt_ids.ids((f"{NONCE}:{ri}:{k}"), chunk)
                     await post(s, ids)
                 else:  # C 组:bp 条短请求齐发 + 池
                     per = chunk // bp
                     await asyncio.gather(*[
-                        post(s, random.Random(ri * 999 + k * 31 + i).choices(range(1, 199000), k=per))
+                        post(s, sharegpt_ids.ids((f"{NONCE}:{ri}:{k}:{i}"), per))
                         for i in range(bp)])
                 await asyncio.sleep(0.25)
             s1 = lines()

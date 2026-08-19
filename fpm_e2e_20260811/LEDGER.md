@@ -361,6 +361,23 @@ step latency lands on 2-3 discrete levels 15-40% apart; selection flips both
 across boots at identical shape and within a boot across ±4k-token
 micro-shapes; each boot+shape is internally stable.
 
+**CORRECTION (2026-08-13, supersedes the verdict above — see
+HANDOVER_DYNAMO_FPM §6.3):** the seven-boot spread is a MEASUREMENT artifact
+of the benchmark's single-sample steady-step timing (arrival-difference
+anchored next to the 1.3s admission window; per-sample hit rate 10-30% at
+giant KV), not engine behavior. Real-traffic cross-boot re-measurement at the
+exact pocket coordinates (301-1119 pure decode steps per boot per coordinate,
+token-identical inputs across boots): spread 0.10-0.42% with graphs ON —
+the engine is boot-deterministic. The micro-shape flip claim is also dead
+(continuous sweep across 18 adjacent micro-shapes: smooth, unimodal,
+MAD 0.10ms). The eager-control contrast was a sample-size asymmetry:
+n=2 clean-by-luck on b=600 (per-sample artifact rate 10-30% ⇒ P(2 clean)
+≈ 50-80%), while b=768 +12.7% in the SAME eager arm shows the artifact hits
+eager points too (the timing formula is scheduler-side, graph-agnostic).
+Do NOT file the vLLM determinism issue. Fix = N-step steady chain, drop the
+first two steps, median of the rest (validated: same-boot spread 104-179%
+→ 0.2-1.1%).
+
 Resolution (owners):
 - collector: flagged giant-KV coordinates collected as multi-boot medians
   (kills the single-boot lottery in the data; residual ±10-20% floor);

@@ -6,6 +6,8 @@ import asyncio
 import csv
 import json
 import random
+
+import sharegpt_ids
 import sys
 import time
 
@@ -43,7 +45,7 @@ def stream_has(start, bp, tok_total, kv_total):
 PFX_CACHE = {}
 def prefix_ids(kv):
     if kv not in PFX_CACHE:
-        PFX_CACHE[kv] = random.Random(10_000 + kv).choices(range(VOCAB_LO, VOCAB_HI), k=kv)
+        PFX_CACHE[kv] = sharegpt_ids.ids((10_000 + kv), kv)
     return PFX_CACHE[kv]
 
 async def post(session, ids):
@@ -56,12 +58,12 @@ BLOCKER = None
 async def fire(session, bp, n, kv, salt):
     global BLOCKER
     pf = prefix_ids(kv) if kv else []
-    prompts = [pf + random.Random(salt * 1000 + i).choices(range(VOCAB_LO, VOCAB_HI), k=n)
+    prompts = [pf + sharegpt_ids.ids((salt * 1000 + i), n)
                for i in range(bp)]
     if bp >= 6:  # 拦路石:大 prefill 挡一步,让 burst 全员到齐后整批入场
         if BLOCKER is None:
-            BLOCKER = random.Random(424242).choices(range(VOCAB_LO, VOCAB_HI), k=8192)
-        blocker_task = asyncio.create_task(post(session, random.Random(salt).choices(range(VOCAB_LO, VOCAB_HI), k=8192)))
+            BLOCKER = sharegpt_ids.ids((424242), 8192)
+        blocker_task = asyncio.create_task(post(session, sharegpt_ids.ids((salt), 8192)))
         await asyncio.sleep(0.05)
         res = await asyncio.gather(*[post(session, p) for p in prompts])
         await blocker_task

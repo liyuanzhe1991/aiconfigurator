@@ -39,10 +39,16 @@ python report/make_scatter.py --scores scores_prefill.csv --title ... --out scat
 python report/gen_report.py --manifest verify_manifest.json   # 清单驱动,格式见脚本头
 ```
 
-## 4. 判据(R16 §4)
+## 4. 判据(R16 §4;2026-08-20 终审修订:判据绑定环境条件)
 
-decode ≤2.0%(基准 1.70/1.61%);tep4 prefill ≤5.5%(基准 4.76%);
+**同机条件(采集与真值同一物理节点,PIN_NODE 钉死)**:decode ≤2.0%
+(基准 1.70/1.61%,即同机同 boot 产物);tep4 prefill ≤5.5%(基准 4.76%)。
+**跨机口径(未钉同机)**:仅作参考,decode 判据放宽至 ~5%——健康节点间
+小坐标测速天然离散 4-6%(时钟守卫盲区,实验定案见 r16/experiments E3/E4),
+低于该地板的跨机读数差异不构成库质量结论。
 dep4 prefill 范围外照出不判;新 cell 首跑出数记档。
+打分时置 `FPM_EXCLUDE_FAKE_FALLBACK=1` 排除库中已知不可信的顶格回退行
+(依据 E5/E9;需库带 kv_seed_regime 列,老库无列时为空转无害)。
 
 ## 待办(维护者)
 

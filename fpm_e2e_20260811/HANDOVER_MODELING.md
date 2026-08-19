@@ -1,11 +1,18 @@
 # Modeling Session 交接书 — FPM regime 感知改造(2026-08-12)
 
+> **状态更新(2026-08-12 晚)**:任务 A 已在 #1461(`fpm-modeling-rust`)完成并推送
+> (公式 commit `74de0ff6`,随后 `0ba8dff2` 合入了含 #1384/#1474/#1496 的最新 main,
+> CI 19/19 绿)。**剩余工作 = 任务 B + 任务 A 的验收网格复放**(§1.5)。
+> 分支拓扑已变:#1384(Python modeling)与 #1474(generator)已合入 upstream main;
+> #1461 现在是纯 Rust 增量,基于最新 main。后续改动**直接在 `fpm-modeling-rust`
+> 分支做**(fpm-all-20260811 集成分支已落后,仅作实验复放用)。
+
 执行本书即可,不需要读完整战役档案;需要证据时按文末索引取。
 详细公式推导在 `MIXED_FORMULA_SPEC.md`(本书是它的执行版,冲突时以本书为准)。
 
 ## 0. 你在哪、改什么、不改什么
 
-- 分支:`fpm-all-20260811`(#1473/#1474/#1475/#1461 已合入)。目标:跟进 #1461(fpm-modeling-rust)。
+- 分支:`fpm-modeling-rust`(#1461,head `0ba8dff2`,已含最新 main)。任务 B 在此跟进。
 - **只改**:`aic-core/src/aiconfigurator_core/sdk/`(operations/fpm_forward.py、backends/base_backend.py)
   与 `aic-core/rust/aiconfigurator-core/`(operators/fpm_forward.rs 及 engine runtime 混合步路径)。
 - **禁改**:Python `sdk/perf_interp/engine.py` **与 Rust
@@ -31,7 +38,7 @@
 
 机器证明 = §2 的 op-level 回归门(测试全绿零 diff)。
 
-## 1. 任务 A — 混合步公式:按"本步调度总 token"定价
+## 1. 任务 A — 混合步公式:按"本步调度总 token"定价 【已完成,见 §1.5】
 
 现状缺陷与新公式全文见 SPEC §1-§2。要点:
 
@@ -47,26 +54,25 @@
 `query()`(fpm_forward.py L650)已经是"组坐标 → `_resolve`(L623 域门+插值)"
 两段式,query_totals 只是跳过组坐标那步:
 
-```python
-def query_totals(self, database, *, batch_size: int,
-                 total_prefill_tokens: int = 0,
-                 total_kv_read_tokens: int = 0) -> PerformanceResult:
-    batch_size = int(batch_size)
-    if batch_size < 1 or total_prefill_tokens < 0 or total_kv_read_tokens < 0:
-        raise ValueError(...)
-    cell = self._load_cell(database)
-    coords = ((batch_size, int(total_prefill_tokens), int(total_kv_read_tokens))
-              if self._phase == "prefill" else (batch_size, int(total_kv_read_tokens)))
-    return self._resolve(cell, coords, database)   # 域门/不外推语义原样继承
-```
+已落地版本(比草稿严一点):`total_kv_read_tokens` 为必填关键字;prefill 要求
+`total_prefill_tokens >= 1`;decode 传非零 prefill 直接 ValueError。域门/不外推
+语义原样继承(先门后插值,包围盒外 `PerfDataNotAvailableError`)。
 
-`base_backend.py` 改点:唯一调用点 L1147 一带(守卫 `forward_model == "fpm"`
-在 L1140),按 SPEC §2.2/§2.3 替换 prefill 分量与多 chunk 求和;decode 边际项
-(`query - query_pass_baseline`)不动。Rust:`operators/fpm_forward.rs` 加同名
-入口(它同样有 resolve 两段式),engine runtime 混合步路径同步换坐标。
+落地位置(0ba8dff2 后):Python 组合在 `_get_fpm_mix_step_latency`(FPM 路由统一走
+`run_mixed`:rust 路由优先,Python 组合是其后的显式分支——**wrapper 级 FPM 早退已
+删除**,别加回来,它会让 sweep 静默绕过 Rust 引擎);Rust 组合在
+`engine/runtime.rs::fpm_mixed_step_components`,并且 #1496 的 per-op FFI 落地后
+`mixed_step_breakdown_per_op` 有独立的 FPM 分支(标量核心的 sink 喂不到它)——
+任务 B 若动 Rust 混合路径,两处都要看。SPEC §3 五类单测已双侧落地
+(悬崖跨界/图内/无重复计费/多 chunk 平均/退化),parity 368 绿。
 
-验收:`mixed_validation_v2_cap2048.csv` 复放,跨界行(chunk=2048)从 -38~-44% 收到
-±15%;新 parquet 全网格 median|δ| ≤ 8%(离线预演已达 5.4%,你只需复现)。
+### 1.5 任务 A 剩余:验收网格复放(未做)
+
+`mixed_validation_v2_cap2048.csv` 复放与"新 parquet 全网格 median|δ| ≤ 8%"
+尚未在真数据上复现(单测用的是 synthetic 悬崖夹具)。做法:randtok parquet
+staged 后按 §2 的验收命令跑;门限:跨界行从 -38~-44% 收到 ±15%(旧数据)/
+median|δ| ≤ 8%(新数据,离线预演 5.4%)。注意 §3 的联动依赖:eager 段格点
+加密(collector 侧)未做前,mixed 会继承 -10% 段误差。
 
 ## 2. 任务 B — decode 批轴 regime 分区(新,机制已钉死)
 
@@ -98,9 +104,14 @@ def query_totals(self, database, *, batch_size: int,
 
 ### 修改方法(代码级锚点)
 
-decode 表在 `load_fpm_forward_data`(fpm_forward.py L356 一带,
-`table.setdefault(batch, {})[total_kv] = latency`)组装,cell 结构为
-`cell["tables"][phase]` + `cell["domains"][phase]`。改三处:
+decode 表在 `load_fpm_forward_data`(fpm_forward.py,行号已因 query_totals /
+部署身份门漂移,按函数名定位)组装,cell 结构为 `cell["tables"][phase]` +
+`cell["domains"][phase]`。注意文件里现已有 `_validate_deployment_identity`
+(vLLM pinned 旋钮 fail-closed 门,#1384 合入前加的)——与任务 B 无交互,别动。
+Rust 侧对应物:loader 在 `perf_database/fpm_forward.rs`(cell 含 per-phase `Node`
++ 预建 `SiteIndex`,切表 = 两组 Node+SiteIndex+boundary 字段),resolve 路由在
+`operators/fpm_forward.rs`(注意上游已把 `SiteIndex::resolve` 改名
+`resolve_value`)。改三处:
 
 ```python
 # 1) load 阶段(表组装完、进 _data_cache 前——保住 immutable-after-load 契约):
@@ -208,10 +219,15 @@ b>1024 frontier 保留、Rust parity。
 - `FPMForwardOp.clear_cache()` 会清 perf_interp 站点索引缓存;切表后确认缓存键
   仍按 id(data) 正确失效(两张子表是两个 dict,天然不同 key,应无事,但测一下)。
 - 本地 CI 清单(过了再推):codeowners strict / import contract / public-api
-  contract / workspace doctests / DCO;Rust 侧 parity 套件(round-1 时 335 通过)。
-- 环境坑:cargo 在 `/opt/homebrew/opt/rustup/bin`(不在默认 PATH);Python 用
-  `.venv/bin/python` + `PYTHONPATH=aic-core/src`;仓库里可能有 stale native .so,
-  跑 parity 前 `uv sync` 重建。
+  contract / workspace doctests / DCO;Rust 侧 parity 套件(0ba8dff2 时 368 通过,
+  上游 #1496 扩了用例)。
+- 环境坑(实测可用的版本):工具链二进制在
+  `~/.rustup/toolchains/stable-aarch64-apple-darwin/bin`(`rustup run` 代理不
+  可靠,直接 export PATH);**改任何 .rs 后必须 `cd aic-core &&
+  .venv/bin/maturin develop` 重建 .so 再跑 Python/parity**——`cargo test` 只重编
+  测试二进制,venv 里的 .so 不会更新(本轮已有一次"新 Python 对旧 Rust"的
+  parity 假分叉,教训);Python 用 `.venv/bin/python`(#1461 worktree 的 venv
+  editable 指向该 worktree,PYTHONPATH 不必设);ruff 用 `uvx ruff@0.14.1`。
 
 ## 5. 证据索引(全部可复算)
 
