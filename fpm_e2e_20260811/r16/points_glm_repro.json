@@ -1,0 +1,1 @@
+{"schema_version": 1, "prefill": [], "decode": [{"batch_size": 512, "total_kv_read_tokens": 753533}, {"batch_size": 497, "total_kv_read_tokens": 763124}]}

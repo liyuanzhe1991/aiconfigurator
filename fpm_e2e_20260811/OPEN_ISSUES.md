@@ -92,3 +92,27 @@ collector 侧 run-manifest 聚合按此树实现(未知键容忍已具备);落�
   证据:scratch r16-wt/fpm_forward_artifacts/07414edaf017a4dd/cells/
   fpm-da9afd202a49f3a8/logs/。
 - 状态:dep8 decode 未采成;tp8 亦待重试。B200 集群已零残留。
+
+### 机制深挖更新(2026-08-20 夜,session d07354d7)
+
+- **断言真身**:`index out of bounds: 0 <= tmp5 < 154880`(×728;154880=GLM 词表)
+  ——非法 token id 进 embedding 查表;
+- **崩溃请求出生地定位**:引擎 instrumented_scheduler.py **line 2788**
+  (fake-decode 请求制造:`prompt = Random(padded_len).choices(range(1,199000), k=padded_len)`)
+  ——dump 中影子请求 prompt_token_ids_len=1536 与 padded_len=ctx+1=1536 咬合;
+  (497,763124) 为该 tier 的 fallback 点(kvwarm 链不可达);
+- **randtok 199000 硬编码族谱**:0812"全零→随机输入"修复引入(按 M2.7 词表
+  手工校准),content v4 只换掉两个主位点,line 2788(fake 制造车间)与
+  line 3477(分派器回退)仍存活;GLM 词表 154880 → 该上界 22% 越界;
+- **但直接凶器判定为合流机制**:本地确定性复算证明崩溃点/对照点的
+  prompt 末位 id 均在词表内(beat1 输入无罪),且 GLM tep8 同样有 102 个
+  fallback 点却通过——当前结论:**fake 路径读未写垃圾 KV × GLM fp8/DSA
+  数值病 → NaN logits → multinomial 垃圾索引 → beat2 embedding 越界**;
+  tep8 免死疑为 TP8 编译图无该断言(静默读垃圾,数据同样不可信);
+- **修法(与主线闸门天然汇合)**:①fake fallback 行本就该被 B1/C1 排除
+  (GLM 上它连行都产不出,直接炸);②line 2788/3477 上界改运行时读
+  vocab_size(消雷);③根治=fallback 点跳过+记账(B4 路线,GLM 需要它);
+- **复现**:单点(对照 512,753533 + 崩溃 497,763124)+ CUDA_LAUNCH_BLOCKING=1
+  已排 B200 队列(fpm-glm-repro pod Pending 中),同步栈终审"采样产物 vs
+  输入构造"。
+
