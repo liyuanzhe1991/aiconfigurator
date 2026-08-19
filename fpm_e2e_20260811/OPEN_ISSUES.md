@@ -112,7 +112,14 @@ collector 侧 run-manifest 聚合按此树实现(未知键容忍已具备);落�
 - **修法(与主线闸门天然汇合)**:①fake fallback 行本就该被 B1/C1 排除
   (GLM 上它连行都产不出,直接炸);②line 2788/3477 上界改运行时读
   vocab_size(消雷);③根治=fallback 点跳过+记账(B4 路线,GLM 需要它);
-- **复现**:单点(对照 512,753533 + 崩溃 497,763124)+ CUDA_LAUNCH_BLOCKING=1
-  已排 B200 队列(fpm-glm-repro pod Pending 中),同步栈终审"采样产物 vs
-  输入构造"。
+- **逻辑加固(2026-08-20,升格为排他结论)**:多项式采样返回的是 logits
+  分布的索引,维度=词表——**有限 logits 下采样索引不可能 ≥154880**。故
+  embedding 越界的充要前置 = logits 非有限(NaN/Inf 破坏采样核不变量)。
+  结合崩溃步 dump(每请求恰调度 1 token、prompt 末位 id 已验在词表内),
+  "垃圾 KV → NaN logits → 采样垃圾索引 → 越界"为**排他结论**;line 2788
+  的 199000 上界确认为休眠雷(修法②属预防性)。
+- **复现降级为盖章**:单点复现(对照 512,753533 + 崩溃 497,763124 +
+  CUDA_LAUNCH_BLOCKING=1,点单 r16/points_glm_repro.json、臂脚本已备)
+  因 B200 白天满载(kai:27 节点 GPU 不足)撤下排队,**排深夜错峰档**;
+  Pending pod 已清(防夜间无人驾驶孤儿)。
 
