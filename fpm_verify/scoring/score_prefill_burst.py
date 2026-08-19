@@ -106,7 +106,7 @@ print(f"prefill 真值坐标 {len(truth)} 个" + (f"(同拍组 {groups})" if DP 
 
 sides, grids, bmaxes = {}, {}, {}
 for tag, root in (("new", args.new_root), ("old", args.old_root)):
-    q, grid, bmax = make_query(root)
+    q, grid, bmax = make_query(root, native_identity=(tag == "new"))
     sides[tag] = {k: q(*k) for k in truth}
     grids[tag], bmaxes[tag] = grid, bmax
 
