@@ -52,3 +52,17 @@ backend),判据见 ../../fpm_e2e_20260811/R16_ACCEPTANCE_SPEC.md §4。
 收割用 `PIN_NODE=<node> bash stage_and_run.sh ...` 钉死同节点。
 stage_and_run 会把实际节点写进 /results/nodeName.txt 并打印 HARVEST-NODE。
 未设 PIN_NODE 会打警告并落随机节点。
+
+## decode 真值驱动(2026-08-20 换装)
+
+decode 相默认驱动改为 `decode_driver.py`(ShareGPT 奇数池 token 直发 +
+DP 拦路石 + isl==1 锁步进场校验,窗口 v3 九列带 lockstep 标)——依据内容
+ABA 实验:bench-random 池系统性偏快 -1.51%。回退开关
+`L3_DECODE_DRIVER=bench` 走旧 vllm bench serve random 路径(窗口七列)。
+状态:代码已就位、语法/编译检查过,GPU 未验证——下次收割先跑 1-2 窗冒烟。
+dep4 注意:plan 的 C 为每 rank 目标,驱动内部 total=C*DP;容量护栏在驱动
+(L3_CAPACITY_GUARD 默认 9M token)。dep4/phase_mixed.sh 的尾链重复
+decode 已拆除,PHASES=all 现在恰好各相一遍。
+
+fetch_results.sh 已换成断点续传版:4MB gzip 块、跨次续传(重跑即接着拉)、
+远端增长中文件按同长前缀 sha 定裁。
