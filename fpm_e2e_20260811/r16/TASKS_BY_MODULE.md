@@ -75,10 +75,14 @@ decode ≤2.0% 门槛绑定"采集与真值同机"条件;跨机验证判据 ~5%(
 炸死采集(垃圾 KV × fp8/DSA 数值病 → NaN → 采样垃圾索引 → embedding 越界,
 见 OPEN_ISSUES c00cc63a)。最终形态:planner 顶格回撤(链可达深度)与引擎
 skip+记账二选一或并用。归属:引擎/collector(与 A 组同域)。
-配套雷区修复(归引擎补丁层,下次烘焙叠上):randtok 上界 199000 →
-运行时读 vocab_size(line 2788/3477);**注意 gc-warmtp-20260820 不含此修,
-GLM dep8/tp8 重试的前置 = 含 vocab 修的新镜像 或 B4 跳过生效,加上
-单点复现盖章**。
+配套雷区修复(修法②,用户直派,主 session 执行):**已烘
+`gc-vocabfix-20260820`**(digest sha256:b2ca3f8a…c777,基底 gc-warmtp +
+层 layer_vocabfix.tar sha 193857b2…;手术=缓存化 _bench_vocab_hi() 运行时读
+model_config.get_vocab_size(),line 2788/3477 两处替换;术后 hard199=0、
+kvwarm/timing/moetp 标记原封、compile 过;M2.7 行为面冒烟中)。
+**GLM dep8/tp8 重试前置更新 = gc-vocabfix-20260820(warmtp+vocabfix 双修)
++ B4 跳过落地 + 深夜复现盖章;复现盖章本身必须用旧镜像
+gc-timing-20260818(新镜像复现不出)**。
 
 ## 裁撤/暂缓(用户拍板,勿复活)
 
