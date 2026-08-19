@@ -10,7 +10,7 @@
 | dep4 decode | ≤2.0% | **2.55%** | 2.85% | 2.0 门未过但**产品优于手工**;缺口两库同担→真值残余环境浮动 |
 | tep4 decode | ≤2.0% | 4.00% | 2.82% | 未过;拆解=真值环境漂移 ~1pp(两库同担)+ 产品库小批段真实偏快 ~5%(见三-2) |
 | tp4 decode | 首跑建档 | 10.4%(中段 −15% 鼓形) | 无基线 | 立案:pure_tp fake 制度中段低估 |
-| tp4 prefill | 首跑建档 | (补充口径待出) | 无基线 | — |
+| tp4 prefill | 首跑建档 | **4.59%**(A 2.49/B 5.84/C 4.94) | 无基线 | 健康,与 tep4 同水准 |
 
 *old tep4 prefill 的 C 层 36% 为旧库自身 kv≥2M 历史不可靠行,另档不混判。
 
@@ -28,7 +28,7 @@
 | 4 | teleport 会话级流劣化截断大件取件 | 基建 | resume 语义正确存活;分块传输/PVC 出件在 dev follow-up |
 | 5 | dep 渲染丢 parity 超参 `--max-num-seqs 512` | 产品,卫生级 | 控制实验证明不影响精度;修复进 follow-up(parity 清单化) |
 | 6 | 带内单 boot(产品无 3-boot 中位协议) | 产品,精度 | tep4 decode 小批段 −5% 的主嫌;feature 立案 |
-| 7 | pure_tp decode fake 制度中段低估 −15% | 建模制度 | 立案(方向:pure_tp 亦真实 KV,或库口径 caveat) |
+| 7 | pure_tp decode fake 制度中段低估 −15%(prefill 4.59% 健康,决定性对照:同台架有预热的 tep/dep decode 2.5-4% vs 无预热 tp4 10.4%) | 建模制度 | 立案(方向:kvwarm 扩展到 pure_tp,或库口径 caveat) |
 | — | README b200 命令快照路径空壳/三形不全;agg 全仿真查询低于包络被 fail-closed 拒 | 文档/上游 | 记档转交 |
 
 验证方法论侧自坑(已全部烤成闸门):守卫必选化+病节点拉黑、相位排空守卫、
