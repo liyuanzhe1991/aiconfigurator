@@ -13,7 +13,9 @@
 //! ```
 //!
 //! is validated (sidecar schema/sha256/row_count, per-row workload checks,
-//! duplicate physical row keys) and grouped into cells keyed by
+//! duplicate physical row keys), stripped of
+//! `kv_seed_regime == "fake_fallback"` rows (fabricated-KV measurements; see
+//! [`FPM_KV_SEED_FAKE_FALLBACK`]), and grouped into cells keyed by
 //! `(model_path, 15 identity columns)`. Each
 //! cell holds one nested table per phase — prefill
 //! `[batch][total_prefill][total_kv]`, decode `[batch][total_kv]` — plus the
@@ -52,6 +54,13 @@ pub const FPM_FORWARD_PARTITION_POLICY: &str = "balanced_v1";
 /// The only measurement policy the collector publishes; pinned in the
 /// sidecar gate (a pair measured under a different regime is structural).
 pub const FPM_FORWARD_MEASUREMENT_POLICY: &str = "dynamo_native_single_sample_v1";
+/// `kv_seed_regime` marker for rows whose KV state the collector could not
+/// reach through the real kvwarm chain and fabricated instead. Such rows are
+/// measurements of the wrong regime (observed 2-3.7x inflated at the
+/// per-batch top rungs) and are excluded from the interpolation lattice at
+/// load. Every other value — `skip:*` topology markers, any future regime
+/// name, null, or a missing column (pre-column pairs) — keeps the row.
+pub const FPM_KV_SEED_FAKE_FALLBACK: &str = "fake_fallback";
 
 /// Identity columns that select a cell, in row-column order (`model_path` is
 /// handled separately; `weight_quantization` is deliberately excluded).
@@ -115,13 +124,21 @@ pub struct FpmForwardCell {
     pub decode_curve_bounds: BTreeMap<u32, (u32, u32)>,
 }
 
+/// One loaded parquet/sidecar pair: the grouped cells plus the count of
+/// `kv_seed_regime == "fake_fallback"` rows dropped on the way in (kept for
+/// error context — the crate has no logging facade).
+struct LoadedPair {
+    cells: Vec<FpmForwardCell>,
+    excluded_fake_fallback: u64,
+}
+
 pub struct FpmForwardTable {
     parquet_path: PathBuf,
     system: String,
     backend: String,
     version: String,
     /// `Ok(None)` = parquet absent ("not collected"); errors are structural.
-    cells: OnceLock<Result<Option<Vec<FpmForwardCell>>, AicError>>,
+    cells: OnceLock<Result<Option<LoadedPair>, AicError>>,
 }
 
 fn structural(msg: String) -> AicError {
@@ -152,10 +169,7 @@ impl FpmForwardTable {
         &self.parquet_path
     }
 
-    /// The loaded cells. Errors when the parquet is absent (with the exact
-    /// path, mirroring `LoadedOpData.raise_if_not_loaded`) or when the pair
-    /// is structurally invalid.
-    pub fn cells(&self) -> Result<&[FpmForwardCell], AicError> {
+    fn loaded(&self) -> Result<&LoadedPair, AicError> {
         let loaded = self.cells.get_or_init(|| {
             load_pair(
                 &self.parquet_path,
@@ -165,13 +179,27 @@ impl FpmForwardTable {
             )
         });
         match loaded {
-            Ok(Some(cells)) => Ok(cells),
+            Ok(Some(pair)) => Ok(pair),
             Ok(None) => Err(AicError::PerfDatabase(format!(
                 "File does not exist at {}. No fpm_forward data collected for this backend/version.",
                 self.parquet_path.display()
             ))),
             Err(err) => Err(clone_err(err)),
         }
+    }
+
+    /// The loaded cells. Errors when the parquet is absent (with the exact
+    /// path, mirroring `LoadedOpData.raise_if_not_loaded`) or when the pair
+    /// is structurally invalid.
+    pub fn cells(&self) -> Result<&[FpmForwardCell], AicError> {
+        Ok(&self.loaded()?.cells)
+    }
+
+    /// How many rows this pair dropped for `kv_seed_regime == "fake_fallback"`
+    /// (0 for pairs predating the column). Surfaced in `select_cell` misses;
+    /// exposed for tests and future load-report plumbing.
+    pub fn excluded_fake_fallback_rows(&self) -> Result<u64, AicError> {
+        Ok(self.loaded()?.excluded_fake_fallback)
     }
 
     /// Cell selection, mirroring Python `FPMForwardOp._select_cell` exactly:
@@ -182,7 +210,8 @@ impl FpmForwardTable {
         match_identity: &[String],
         model_path: &str,
     ) -> Result<&FpmForwardCell, AicError> {
-        let cells = self.cells()?;
+        let loaded = self.loaded()?;
+        let cells: &[FpmForwardCell] = &loaded.cells;
         // Exact matching on every identity dimension (D1 resolved: the match
         // identity carries no architecture fingerprint, so borrowing the sole
         // collected model_path could silently answer for a different model).
@@ -203,11 +232,19 @@ impl FpmForwardTable {
                 .zip(match_identity)
                 .map(|(c, v)| format!("{c}={v:?}"))
                 .collect();
+            let excluded_note = if loaded.excluded_fake_fallback > 0 {
+                format!(
+                    " Note: {} kv_seed_regime=\"fake_fallback\" rows were excluded at load.",
+                    loaded.excluded_fake_fallback
+                )
+            } else {
+                String::new()
+            };
             return Err(structural(format!(
                 "No FPM cell matches model_path={model_path:?} with identity {{{}}}. \
                  FPM never substitutes another model's curves; collect data \
                  under this exact model path or query with the collected path. Collected cells \
-                 (model_path, identity): [{}]",
+                 (model_path, identity): [{}]{excluded_note}",
                 identity.join(", "),
                 available.join(", ")
             )));
@@ -378,7 +415,7 @@ fn load_pair(
     system: &str,
     backend: &str,
     version: &str,
-) -> Result<Option<Vec<FpmForwardCell>>, AicError> {
+) -> Result<Option<LoadedPair>, AicError> {
     if !parquet_path.exists() {
         return Ok(None);
     }
@@ -430,6 +467,9 @@ fn load_pair(
         int_idx.insert(name, reader.col(name)?);
     }
     let latency_col = reader.col("latency_ms")?;
+    // KV-seed provenance column (additive; absent in pairs that predate it).
+    // Resolved once here; per-row reads treat null the same as absence.
+    let kv_seed_col = reader.col_optional("kv_seed_regime");
 
     // Python checks the sidecar row_count against the FULL row list before any
     // per-row validation (`load_fpm_forward_data`: read_table -> row_count ->
@@ -454,6 +494,7 @@ fn load_pair(
     }
 
     let mut rows: Vec<FpmRow> = Vec::new();
+    let mut excluded_fake_fallback: u64 = 0;
     for (index, row) in reader.rows()?.enumerate() {
         let row = row?;
         let get_str = |name: &str| -> Result<String, AicError> {
@@ -606,6 +647,19 @@ fn load_pair(
             partition_policy,
         ];
 
+        // Fake-seeded measurements are excluded AFTER every structural gate
+        // above (a malformed fake row still fails the load loudly) but BEFORE
+        // the duplicate/collision checks and cell grouping below — so a later
+        // true measurement at the same coordinates can coexist with the fake
+        // row it supersedes, and the fake value never enters the lattice.
+        // The sidecar `row_count` cross-check ran pre-filter: it counts what
+        // is on disk, not what survives.
+        let kv_seed_regime = row.str_optional(kv_seed_col)?.unwrap_or("");
+        if kv_seed_regime == FPM_KV_SEED_FAKE_FALLBACK {
+            excluded_fake_fallback += 1;
+            continue;
+        }
+
         rows.push(FpmRow {
             cell_id: get_str("cell_id")?,
             model_path: get_str("model_path")?,
@@ -617,6 +671,15 @@ fn load_pair(
             total_kv_read_tokens,
             latency_ms,
         });
+    }
+    if rows.is_empty() {
+        // `actual_row_count == 0` was rejected above, so an empty survivor
+        // set means the filter consumed the whole pair.
+        return Err(structural(format!(
+            "FPM database contains no usable rows: all {excluded_fake_fallback} rows are \
+             kv_seed_regime=\"fake_fallback\" fabricated-seed measurements: {}",
+            parquet_path.display()
+        )));
     }
 
     // Duplicate physical row keys are collector bugs, not last-wins merges.
@@ -737,7 +800,10 @@ fn load_pair(
             Ok(cell)
         })
         .collect::<Result<Vec<_>, AicError>>()?;
-    Ok(Some(cells))
+    Ok(Some(LoadedPair {
+        cells,
+        excluded_fake_fallback,
+    }))
 }
 
 /// Piecewise-linear evaluation of one decode KV curve (detection-only; the
@@ -922,6 +988,10 @@ pub(crate) mod tests {
         pub cell_id: Option<&'static str>,
         pub system: &'static str,
         pub backend: &'static str,
+        /// KV-seed provenance. `None` writes a null (or, when no row in the
+        /// fixture sets it, omits the column entirely — the pre-column
+        /// legacy layout).
+        pub kv_seed_regime: Option<&'static str>,
     }
 
     impl Default for RowSpec {
@@ -943,6 +1013,7 @@ pub(crate) mod tests {
                 cell_id: None,
                 system: "b200_sxm",
                 backend: "vllm",
+                kv_seed_regime: None,
             }
         }
     }
@@ -1000,6 +1071,9 @@ pub(crate) mod tests {
         use parquet::schema::parser::parse_message_type;
 
         let parquet_path = dir.join(FPM_FORWARD_BASENAME);
+        // The provenance column is written only when a fixture row sets it,
+        // so default fixtures exercise the pre-column legacy layout.
+        let has_kv_seed = rows.iter().any(|r| r.kv_seed_regime.is_some());
         let schema = "message schema {
             REQUIRED BINARY cell_id (UTF8);
             REQUIRED BINARY model_path (UTF8);
@@ -1029,7 +1103,15 @@ pub(crate) mod tests {
             REQUIRED BINARY partition_policy (UTF8);
             REQUIRED DOUBLE latency_ms;
         }";
-        let schema = Arc::new(parse_message_type(schema).expect("schema must parse"));
+        let schema = if has_kv_seed {
+            schema.replace(
+                "REQUIRED DOUBLE latency_ms;",
+                "REQUIRED DOUBLE latency_ms;\n            OPTIONAL BINARY kv_seed_regime (UTF8);",
+            )
+        } else {
+            schema.to_string()
+        };
+        let schema = Arc::new(parse_message_type(&schema).expect("schema must parse"));
         let file = std::fs::File::create(&parquet_path).expect("create parquet");
         let mut writer =
             SerializedFileWriter::new(file, schema, Arc::new(WriterProperties::builder().build()))
@@ -1142,6 +1224,25 @@ pub(crate) mod tests {
             let mut col = rg.next_column().expect("next col").expect("f64 col");
             col.typed::<DoubleType>()
                 .write_batch(&values, None, None)
+                .expect("write");
+            col.close().expect("close");
+        }
+        if has_kv_seed {
+            // OPTIONAL column: dense values for Some rows, def level 0 = null.
+            let mut values: Vec<ByteArray> = Vec::new();
+            let def_levels: Vec<i16> = rows
+                .iter()
+                .map(|r| match r.kv_seed_regime {
+                    Some(v) => {
+                        values.push(ByteArray::from(v));
+                        1
+                    }
+                    None => 0,
+                })
+                .collect();
+            let mut col = rg.next_column().expect("next col").expect("str col");
+            col.typed::<ByteArrayType>()
+                .write_batch(&values, Some(&def_levels), None)
                 .expect("write");
             col.close().expect("close");
         }
@@ -1385,6 +1486,123 @@ pub(crate) mod tests {
         });
         let err = loaded_table(tmp.path()).cells().unwrap_err();
         assert!(err.to_string().contains("row_count mismatch"), "{err}");
+    }
+
+    /// A fake-seeded top rung must not widen the lattice: its coordinates
+    /// disappear from the domain, and the exclusion is counted. The sidecar
+    /// `row_count` covers the FULL on-disk file (10 rows here), proving the
+    /// cross-check runs pre-filter.
+    #[test]
+    fn fake_fallback_rows_are_excluded_from_the_lattice() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let mut rows = default_rows();
+        rows.push(RowSpec {
+            workload_kind: "decode",
+            batch_size: 8,
+            total_prefill_tokens: 0,
+            total_kv_read_tokens: 131072,
+            latency_ms: 99.0,
+            kv_seed_regime: Some(FPM_KV_SEED_FAKE_FALLBACK),
+            ..RowSpec::default()
+        });
+        write_pair(tmp.path(), &rows);
+        let table = loaded_table(tmp.path());
+        let cells = table.cells().expect("must load");
+        assert_eq!(cells.len(), 1);
+        assert_eq!(cells[0].decode_domain, Some([(8, 16), (8, 65536)]));
+        assert_eq!(table.excluded_fake_fallback_rows().unwrap(), 1);
+    }
+
+    /// Only the exact `fake_fallback` marker excludes. The collector's full
+    /// value vocabulary — `real_kv` chain-seeded rows, `skip:<reason>`
+    /// topology markers, prefill `n/a`, and nulls (column present) — stays.
+    #[test]
+    fn skip_markers_chain_names_and_nulls_are_kept() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let mut rows = default_rows();
+        rows[0].kv_seed_regime = Some("n/a"); // prefill row
+        rows[5].kv_seed_regime = Some("skip:moe_tp_balanced_by_construction");
+        rows[6].kv_seed_regime = Some("real_kv");
+        // rows[7] stays None -> written as a null in the present column.
+        write_pair(tmp.path(), &rows);
+        let table = loaded_table(tmp.path());
+        let cells = table.cells().expect("must load");
+        assert_eq!(cells[0].decode_domain, Some([(8, 16), (8, 65536)]));
+        assert_eq!(table.excluded_fake_fallback_rows().unwrap(), 0);
+    }
+
+    /// Pairs predating the column (none of the default fixtures write it)
+    /// load unchanged and report zero exclusions.
+    #[test]
+    fn legacy_pair_without_the_column_reports_zero_excluded() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        write_pair(tmp.path(), &default_rows());
+        let table = loaded_table(tmp.path());
+        assert!(table.cells().is_ok());
+        assert_eq!(table.excluded_fake_fallback_rows().unwrap(), 0);
+    }
+
+    /// The filter consuming the whole pair is loud, not an empty table.
+    #[test]
+    fn all_rows_fake_fallback_is_a_loud_error() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let mut rows = default_rows();
+        for row in &mut rows {
+            row.kv_seed_regime = Some(FPM_KV_SEED_FAKE_FALLBACK);
+        }
+        write_pair(tmp.path(), &rows);
+        let err = loaded_table(tmp.path()).cells().unwrap_err();
+        assert!(
+            err.to_string().contains("no usable rows") && err.to_string().contains("all 9 rows"),
+            "{err}"
+        );
+    }
+
+    /// Retro-fill workflow: a later TRUE measurement at the same coordinates
+    /// coexists with the fake row it supersedes (the fake row is filtered
+    /// before the coordinate-collision check) and the true value serves.
+    #[test]
+    fn a_true_remeasurement_supersedes_its_excluded_fake_row() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let mut rows = default_rows();
+        rows.push(RowSpec {
+            workload_kind: "decode",
+            batch_size: 8,
+            total_prefill_tokens: 0,
+            total_kv_read_tokens: 65536, // same coords as the real 9.0 row
+            latency_ms: 99.0,
+            cell_id: Some("fpm-earlier-fake-run"),
+            kv_seed_regime: Some(FPM_KV_SEED_FAKE_FALLBACK),
+            ..RowSpec::default()
+        });
+        write_pair(tmp.path(), &rows);
+        let table = loaded_table(tmp.path());
+        let cells = table.cells().expect("must load despite shared coords");
+        let curves = decode_curves(&cells[0].decode);
+        assert_eq!(curves[&8][&65536], 9.0);
+        assert!(!cells[0]
+            .cell_ids
+            .iter()
+            .any(|c| c == "fpm-earlier-fake-run"));
+        assert_eq!(table.excluded_fake_fallback_rows().unwrap(), 1);
+    }
+
+    /// Fail-visible: a cell-selection miss on a pair that dropped rows says
+    /// so, pointing the user at the exclusion instead of a silent hole.
+    #[test]
+    fn select_cell_miss_reports_the_excluded_rows() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let mut rows = default_rows();
+        rows[0].kv_seed_regime = Some(FPM_KV_SEED_FAKE_FALLBACK);
+        write_pair(tmp.path(), &rows);
+        let err = loaded_table(tmp.path())
+            .select_cell(&default_identity(8), "org/model-a")
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("1 kv_seed_regime=\"fake_fallback\" rows were excluded at load"),
+            "{err}"
+        );
     }
 
     /// system/backend are in the physical row key but NOT the cell key: a
