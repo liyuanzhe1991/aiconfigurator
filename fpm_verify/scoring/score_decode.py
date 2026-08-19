@@ -20,7 +20,7 @@ from aiconfigurator_core.sdk import perf_database
 from aiconfigurator_core.sdk.operations.fpm_forward import FPMForwardOp
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--topo", choices=["tep4", "dep4"], required=True)
+ap.add_argument("--topo", choices=["tep4", "dep4", "tp4"], required=True)
 ap.add_argument("--stream", required=True, nargs="+")
 ap.add_argument("--windows", required=True, nargs="+")
 ap.add_argument("--new-root", required=True)
@@ -34,6 +34,8 @@ args = ap.parse_args()
 assert len(args.stream) == len(args.windows), "stream/windows 必须成对给"
 
 DP = 4 if args.topo == "dep4" else 1
+MOE_TP = 4 if args.topo == "tp4" else 1
+MOE_EP = 1 if args.topo == "tp4" else 4
 
 def make_query(root):
     perf_database.set_systems_paths([root])
@@ -42,7 +44,7 @@ def make_query(root):
     cfg = sdk_config.ModelConfig(
         # dep 库的既定查询口径 = tp4 形身份(先例:score_l3_dp.py)
         tp_size=4, pp_size=1, attention_dp_size=1,
-        moe_tp_size=1, moe_ep_size=4, cp_size=1,
+        moe_tp_size=MOE_TP, moe_ep_size=MOE_EP, cp_size=1,
         gemm_quant_mode=common.GEMMQuantMode.fp8_block,
         moe_quant_mode=common.MoEQuantMode.fp8_block,
         fmha_quant_mode=common.FMHAQuantMode.bfloat16,
