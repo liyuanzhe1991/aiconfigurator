@@ -135,7 +135,11 @@ sha256 清单 `artifacts/SHA256SUMS.txt`。原始 benchmark JSON(25-52MB/cell)
 库,因引擎 kvwarm 对 moe_tp 跳过 + 渲染对 pure_tp pin --no-enable-prefix-caching,
 全网格为零上下文假 KV 测量,定罪偏差 −15.3%(真值 MAPE 10.43%)。修复=
 A1(kvwarm 删 moe_tp skip)+A2(渲染撤 pin),修复后全网格重采实证 4.80%,
-待烘正式镜像后按本文流程重采转正。**(b) 各批量档 kv 顶格点回退假 KV 形成
+修复镜像已烘并通过零补丁冒烟(08-20):**tp4 重采用
+`nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-warmtp-20260820`**
+(digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424)
+替换本文 §3 命令中的镜像 tag,其余逐字不变;配套渲染改动(A2)需在 PR 树
+defcc285 及之后。等用户点火后执行。**(b) 各批量档 kv 顶格点回退假 KV 形成
 毒行**(虚高 ×2-3.7,插值放大巨段 ~7%):修复=B1(v6 kv_seed_regime 列)+
 C1(SDK FPM_EXCLUDE_FAKE_FALLBACK=1 排除,已入分支)。证据:
 ../R16_FINAL_REPORT.md 第 7 章、experiments/EXPERIMENTS_STEPBYSTEP.md E5/E7/E8/E9。

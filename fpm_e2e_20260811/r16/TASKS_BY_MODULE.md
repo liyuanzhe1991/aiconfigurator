@@ -16,9 +16,12 @@
 (E8,含中段 12%→3.8%、巨段 1.51%)。
 **状态(08-20)**:镜像已烘 `gc-warmtp-20260820`
 (digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424,
-基底 gc-timing-20260818 + 单层手术,dense/prefix 守卫保留)——**待冒烟判决**
-(全新拉取 + 24 点 tp4 零补丁冒烟,期望 warm_eligible=True);冒烟过后方可
-按 RUNBOOK 走产品链正式重采 tp4。A2 配套渲染改动在 r16-wt defcc285。
+基底 gc-timing-20260818 + 单层手术,dense/prefix 守卫保留)——**冒烟通过,
+已放行(08-20)**:全新拉取标记盘点过(kvwarm=138/moetp=0),零补丁 24 点
+tp4 冒烟 warm_eligible=True、23/24 real_kv(唯一 fallback=池顶点,符合预期),
+与 sed 实验版同节点逐点中位差 +0.08%。A2 配套渲染改动在 r16-wt defcc285。
+**tp4 正式重采前置条件已齐,等用户点火**(按 RUNBOOK §3 流程,镜像换
+gc-warmtp-20260820)。
 
 **A2|渲染撤 pure_tp 的 prefix-caching pin(A1 联动)**
 缺陷1 条件化修复把 pure_tp 归入"禁 prefix caching"侧;开 warm 后 tp4 必须
