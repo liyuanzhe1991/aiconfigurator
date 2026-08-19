@@ -26,4 +26,3 @@ for KVD_ISL in 8192 65536; do
 done
 echo "T_mixed_done=$(date +%s)" >> /results/l3_timing.log
 echo MIXED-PHASE-DONE
-bash /tmp/fpm-serve/phase_decode.sh > /results/phase_decode.log 2>&1
