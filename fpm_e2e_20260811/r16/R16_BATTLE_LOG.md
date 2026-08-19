@@ -195,3 +195,22 @@ tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
 - r15 制度指纹对比(66% eager)系 agg 模式合并档与产品分 cell 档的
   错位比较,不构成证据;dep4 eager 常态档案维持为 serving 观察,不再驱动
   采集制度改动。
+
+## 小坐标偏快案(2026-08-19 下午,用户抓获抽签解释不成立)
+
+- 事实:R16 两轮独立 boot(fake 轮/预热轮)decode 小坐标均偏快 6-8%;
+  r15 旧库对同一新真值仅偏 −1%。两轮同向 → 结构性,非单 boot 彩票,
+  缺陷6(多 boot 中位)最多解释波动幅度,不解释方向一致。
+- r15 报告对照确认:当年 1.70/1.60% 为"同会话真值"(r14-native
+  single-session,库与真值共享节点/日期/boot 生态);跨环境后旧库为
+  2.82-2.97%,红利 ~1.1pp。real-vs-fake 压倒性在中大 kv 主场复现
+  (3×,signed −8.75%→−0.94%)。
+- 头号嫌疑(候选缺陷8):产品 cell 拆分使 decode 网格跑在新鲜引擎上
+  (r14/r15 agg 模式 decode 跑在 9505 prefill 之后的锻炼态),主机敏感的
+  小步在新鲜态系统性偏快;真值 serving 恒为长跑态。次嫌:板卡修订差
+  (-000 vs -001,resolved-config gpu_info 实录)。
+- 判别实验(待用户拍板):同 boot 内"9505 prefill 后 decode"(复刻 agg 态)
+  vs 新鲜态 decode-only 同坐标对拍,~1.5h。
+- 附:resolved-config 全字段 diff 闸首跑即产出(737 字段,剔噪 14 差异),
+  另暴露 R16 未显式设 DYN_BENCH_KV_WARMUP(依赖引擎默认开)与 UCX/NIXL
+  env 缺失(单节点无害,进 parity 清单)。
