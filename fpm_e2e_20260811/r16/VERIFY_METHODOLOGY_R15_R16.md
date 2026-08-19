@@ -51,8 +51,19 @@ kv 每步增长,一窗扫出一条 (C, kv) 射线;多窗多次重复 = 同坐标
 - isl==1 的浅池窗做锁步进场校验,通过则标 `lockstep`(打分器对锁步窗
   逐坐标直录,不平滑);
 - 窗口表 v3 九列:`tag,C,isl,osl,rep,s0,s1,ok,mark`;
-- 回退开关 `L3_DECODE_DRIVER=bench` 可切回旧 vllm-bench-random 路径
-  (R16 战役当时所用;仅用于对照)。
+- 回退开关 `L3_DECODE_DRIVER=bench` 可切回旧 vllm-bench-random 路径。
+
+> **版本注意(重要,防口径混淆)**:decode 真值驱动有两代——
+> ①**R16 战役当时(08-19)用的是旧路径**:`vllm bench serve random`,
+> 随机内容、**无拦路石、无进场校验**、v1 七列窗;**本报告终审记分牌的
+> 全部 decode 数字(2.42/2.75、4.00/2.82、10.43/4.80 等)都是对这份
+> 旧真值打的分**。复现这些数字必须 `L3_DECODE_DRIVER=bench`。
+> ②**kit v2(08-20 起默认)**即上述 decode_driver.py(ShareGPT+DP
+> 拦路石+锁步校验+v3 窗),依据内容 ABA 实验(E6,random 偏快 −1.51%);
+> 语义链已验证,首次正式使用前需 GPU 冒烟。两代不可混打:同一批数字
+> 必须出自同一代真值。
+> (prefill burst 不受此代差影响——它从 R16 战役起就一直带拦路石与
+> 现场校验,两代同款。)
 
 引擎为 decode-parity 配置:与采集 cell 同镜像、同拓扑、同 kv dtype;
 显式 `--no-enable-prefix-caching`(防 bench 请求前缀命中挤占物理 KV 池;
