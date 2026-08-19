@@ -69,13 +69,23 @@ prefix caching ON(warm 谓词前提)。渲染规则改为"warm-eligible 拓扑�
 decode ≤2.0% 门槛绑定"采集与真值同机"条件;跨机验证判据 ~5%(地板 ±3-4%)。
 依据:r15 的 1.70% 为同机同 boot 产物;三节点探针 + 噪声注入因果(E3/E4)。
 
+**B4|fallback 点跳过+记账(复活,2026-08-20)**
+原被「记录+排除」路线替代而裁撤;**GLM dep8 崩溃案投复活票——动机从精度
+升级为正确性**:GLM 上 fake fallback 路径不是产毒行而是直接 device assert
+炸死采集(垃圾 KV × fp8/DSA 数值病 → NaN → 采样垃圾索引 → embedding 越界,
+见 OPEN_ISSUES c00cc63a)。最终形态:planner 顶格回撤(链可达深度)与引擎
+skip+记账二选一或并用。归属:引擎/collector(与 A 组同域)。
+配套雷区修复(归引擎补丁层,下次烘焙叠上):randtok 上界 199000 →
+运行时读 vocab_size(line 2788/3477);**注意 gc-warmtp-20260820 不含此修,
+GLM dep8/tp8 重试的前置 = 含 vocab 修的新镜像 或 B4 跳过生效,加上
+单点复现盖章**。
+
 ## 裁撤/暂缓(用户拍板,勿复活)
 
 - B2 老库 backfill 工具(暂缓;逻辑已验证,见 E9);
 - nodeName 记录进 aic manifest(机器域信息归验证方自记,不入 aic);
 - C2 上边缘查询语义扩展(维持 fail-closed 现状)、C3 平滑性验尸闸、
   C4 插值档选择案、C5 单独排期的 Rust 项(并入 C1 转正式);
-- B4 planner 顶格点回撤/引擎跳过路线(被「记录+排除」路线替代)。
 
 ## 挂账(不阻塞本批)
 
