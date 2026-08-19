@@ -8,6 +8,9 @@
 
 本节回答三个问题:相对最早的"全零输入"采集,现在改了什么;每项改变归属
 哪个模块;当前用哪个镜像、精度到了哪。细节均有指针可深挖。
+**想动手复现(collect→建库→预测→verify 全链)**:走单线手册
+[`REPRODUCE_END_TO_END.md`](REPRODUCE_END_TO_END.md)(每步字面命令+成功
+标志+常见坑速查)。
 
 ### 0.1 测量制度五个时代
 
@@ -45,7 +48,8 @@ CPU 配额(+0.03%)、多 boot 中位作为小批段解释(被节点异质性取�
 | gc-steady 系 | 全零输入时代基底 | 退役 |
 | gc-steady-randtok(2)-20260812 | +全零→随机输入修复 | 退役(r14/r15 在其上现场打 kvwarm 补丁) |
 | gc-timing-20260818(digest adcd28a9…8c48) | +kvwarm/content v4/argsdump/timing.phases 烘焙 | R16 战役用;tep/dep 仍可用 |
-| **gc-warmtp-20260820**(digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424) | +A1(pure_tp kvwarm 放行),单层手术,dense/prefix 守卫保留 | **现行推荐;零补丁冒烟 23/24 real_kv、与实验版 +0.08%;tp4 正式重采待点火** |
+| **gc-warmtp-20260820**(digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424) | +A1(pure_tp kvwarm 放行),单层手术,dense/prefix 守卫保留 | 冒烟放行(23/24 real_kv、与实验版 +0.08%) |
+| **gc-vocabfix-20260820**(digest sha256:b2ca3f8a11190d92d6fcaa143e4a6faddc4a67a7031ca498a46595a3961ec777) | 基底 gc-warmtp +修法②(fake 车间运行时读模型词表,消 vocab 越界雷) | **现行推荐(双修);M2.7 行为面冒烟全绿:四 cell 0 错、fallback 点走修复车间正常完成、warmtp 行为原样;GLM 重试镜像前置就绪(还差 B4)** |
 
 ### 0.4 当前精度状态(终审记分牌摘要)
 
@@ -105,9 +109,9 @@ kv 档位集合(~16 个档、最大 ~10 万 token,逐档一次全体共享),且�
 |---|---|---|---|
 | **B1:kv_seed_regime 列进库** | collector(#1475 链) | **代码已落 PR 树**(f2a2b61b:cell 级 skip_reason 优先推导、DP 跨 rank 一致性校验、加性列合并显式 null 归一;存档回归过:tep4 1455 real/102 fallback,tp4 全 skip:*;+218 行单测) | 待随 #1475 链合入上游 |
 | **B4:fallback 点跳过+记账(复活)** | 引擎/collector | 设计定型中——原被「记录+排除」替代而裁撤,**GLM dep8 崩溃案投复活票,动机从精度升级为正确性**(GLM 上 fake 路径不产毒行而是直接 device assert 炸死采集) | 与 A 组同域;planner 顶格回撤与引擎 skip 二选一或并用 |
-| **修法②:vocab 越界消雷** | 引擎/镜像 | **已烘 `gc-vocabfix-20260820`**(基底 gc-warmtp + 缓存化 _bench_vocab_hi() 运行时读 model vocab_size,双位点替换;kvwarm/timing/moetp 标记原封) | M2.7 行为面冒烟中 |
+| **修法②:vocab 越界消雷** | 引擎/镜像 | **已烘 `gc-vocabfix-20260820` 且 M2.7 行为面冒烟全绿**(四 cell 0 错;fallback 点如实走修复后 fake 车间;warmtp 行为叠层后原样) | GLM 重试镜像前置就绪(还差 B4) |
 | **GLM dep8/tp8 重试** | 采集执行 | 排队 | 前置=gc-vocabfix 双修镜像 + B4 落地 + 深夜复现盖章(**盖章必须用旧镜像 gc-timing-20260818**——新镜像已消雷复现不出) |
-| **tp4 正式重采** | 采集执行 | **前置全齐,等用户点火** | gc-warmtp 镜像(冒烟放行)+ A2 渲染(defcc285);按 RUNBOOK §3 换镜像 tag |
+| **tp4 正式重采** | 采集执行 | **前置全齐,等用户点火** | 镜像 gc-warmtp 或 gc-vocabfix(双修,推荐)均可 + A2 渲染(defcc285);按 RUNBOOK §3 换镜像 tag |
 | C1 转正式 | aic-core SDK | env 门控版已入分支 | 定默认值 + Rust 移植同步,随 B1 合并批 |
 | GLM dep8 assert 机制链 | 诊断 | **已升格排他结论**:垃圾 KV × GLM 数值病 → NaN → 采样垃圾索引 → embedding 越界(词表 154880);复现盖章排深夜档 | OPEN_ISSUES 有完整案卷 |
 | T4 正式发布 / 上游 #1473/#1475 合并 | 发布/上游 | 等用户批白名单 / 等 maintainer | — |

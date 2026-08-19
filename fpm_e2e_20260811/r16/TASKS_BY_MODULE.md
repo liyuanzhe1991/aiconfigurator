@@ -20,8 +20,8 @@
 已放行(08-20)**:全新拉取标记盘点过(kvwarm=138/moetp=0),零补丁 24 点
 tp4 冒烟 warm_eligible=True、23/24 real_kv(唯一 fallback=池顶点,符合预期),
 与 sed 实验版同节点逐点中位差 +0.08%。A2 配套渲染改动在 r16-wt defcc285。
-**tp4 正式重采前置条件已齐,等用户点火**(按 RUNBOOK §3 流程,镜像换
-gc-warmtp-20260820)。
+**tp4 正式重采前置条件已齐,等用户点火**(按 RUNBOOK §3 流程,镜像用
+gc-warmtp-20260820 或 gc-vocabfix-20260820 均可——后者=warmtp+vocab 双修,已冒烟全绿)。
 
 **A2|渲染撤 pure_tp 的 prefix-caching pin(A1 联动)**
 缺陷1 条件化修复把 pure_tp 归入"禁 prefix caching"侧;开 warm 后 tp4 必须
@@ -79,9 +79,12 @@ skip+记账二选一或并用。归属:引擎/collector(与 A 组同域)。
 `gc-vocabfix-20260820`**(digest sha256:b2ca3f8a…c777,基底 gc-warmtp +
 层 layer_vocabfix.tar sha 193857b2…;手术=缓存化 _bench_vocab_hi() 运行时读
 model_config.get_vocab_size(),line 2788/3477 两处替换;术后 hard199=0、
-kvwarm/timing/moetp 标记原封、compile 过;M2.7 行为面冒烟中)。
-**GLM dep8/tp8 重试前置更新 = gc-vocabfix-20260820(warmtp+vocabfix 双修)
-+ B4 跳过落地 + 深夜复现盖章;复现盖章本身必须用旧镜像
+kvwarm/timing/moetp 标记原封、compile 过;**M2.7 行为面冒烟全绿(08-20)**:
+四 cell 0 错误,decode cell warm_eligible=True、real=2/fb=2,fallback 点
+如实走了修复后的 fake 车间(运行时读词表)并正常完成,warmtp 行为在
+叠层后原样保持)。
+**GLM dep8/tp8 重试前置更新 = gc-vocabfix-20260820(已冒烟全绿)+ B4 跳过
+落地 + 深夜复现盖章;复现盖章本身必须用旧镜像
 gc-timing-20260818(新镜像复现不出)**。
 
 ## 裁撤/暂缓(用户拍板,勿复活)

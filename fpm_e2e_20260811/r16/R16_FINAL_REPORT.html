@@ -7,7 +7,7 @@ h1{border-bottom:3px solid #76b900;padding-bottom:6px}h2{border-bottom:2px solid
 small{color:#555}code{background:#f5f5f5;padding:1px 5px;border-radius:3px}</style></head><body>
 <h1>R16 验收终版报告 — 纯 AIC 命令端到端</h1><div style="border:2px solid #b45309;background:#fef3c7;padding:10px 14px;margin:10px 0;border-radius:6px"><b>阅读指引(2026-08-20)</b>:第 1~6 章为 08-19 战役当日版本(含当时的临时数字与假设);<b>终审数字与六案判决以第 7 章为准</b>——dep4 decode 2.42%/2.75%(旧值 2.55/2.85 作废);tep4 decode 4.00%(排除毒行 3.72%,缺口=节点异质性+真值内容,非采集回归);tp4 decode 10.43%→修复实证 4.80%;全零输入时代库 9.99%(旧称「随机KV」系勘误)。MD 版 R16_FINAL_REPORT.md 已同步终审。</div>
 <h2>0. 演进总览(自全零输入时代以来的全部改变;外部读者从这里开始)</h2>
-<h3>0.1 测量制度五个时代</h3>
+<p><b>想动手复现(collect→建库→预测→verify 全链)</b>:走单线手册 REPRODUCE_END_TO_END.md(每步字面命令+成功标志+常见坑速查,与本报告同目录)。</p><h3>0.1 测量制度五个时代</h3>
 <table border="1" cellpadding="6" style="border-collapse:collapse">
 <tr><th>时代</th><th>时间</th><th>decode 测量制度</th><th>prefill 输入</th><th>tep4 decode 精度(同一份新真值)</th></tr>
 <tr><td>①全零输入</td><td>~08-12 前</td><td>零上下文 fake 块表</td><td><b>全零 token</b></td><td><b>9.99%</b></td></tr>
@@ -37,7 +37,7 @@ small{color:#555}code{background:#f5f5f5;padding:1px 5px;border-radius:3px}</sty
 <tr><td>gc-steady 系</td><td>全零输入时代基底</td><td>退役</td></tr>
 <tr><td>gc-steady-randtok(2)-20260812</td><td>+全零→随机输入修复</td><td>退役</td></tr>
 <tr><td>gc-timing-20260818(adcd28a9…8c48)</td><td>+kvwarm/content v4/argsdump/timing 烘焙</td><td>R16 战役用;tep/dep 可用</td></tr>
-<tr><td><b>gc-warmtp-20260820</b><br>(sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424)</td><td>+A1 pure_tp kvwarm 放行(单层手术)</td><td><b>现行推荐;冒烟 23/24 real_kv、+0.08%;tp4 正式重采待点火</b></td></tr>
+<tr><td><b>gc-warmtp-20260820</b><br>(sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424)</td><td>+A1 pure_tp kvwarm 放行(单层手术)</td><td>冒烟放行(23/24 real_kv、+0.08%)</td></tr><tr><td><b>gc-vocabfix-20260820</b><br>(sha256:b2ca3f8a11190d92d6fcaa143e4a6faddc4a67a7031ca498a46595a3961ec777)</td><td>基底 gc-warmtp +修法②(fake 车间运行时读词表,消 vocab 越界雷)</td><td><b>现行推荐(双修);M2.7 冒烟全绿;GLM 重试前置就绪(还差 B4)</b></td></tr>
 </table>
 <h3>0.4 当前精度状态</h3>
 <p>tep4 prefill <b>3.93% PASS</b>;dep4 prefill <b>4.62%</b>;dep4 decode <b>2.42%</b>(产品,优于手工 2.75%);
@@ -62,9 +62,9 @@ tep4 decode 4.00%(排除毒行 <b>3.72%</b>,残差=跨机地板);tp4 prefill <b>
 <tr><th>事项</th><th>归属</th><th>状态</th><th>前置/备注</th></tr>
 <tr><td><b>B1:kv_seed_regime 列进库</b></td><td>collector(#1475)</td><td><b>代码已落 PR 树</b>(f2a2b61b:cell 级 skip_reason 优先、跨 rank 一致性校验、加性列显式 null 归一;存档回归 tep4 1455/102、tp4 全 skip:*;+218 行单测)</td><td>待随 #1475 合入上游</td></tr>
 <tr><td><b>B4:fallback 点跳过+记账(复活)</b></td><td>引擎/collector</td><td>设计定型中——GLM dep8 崩溃案投复活票,动机从精度升级为<b>正确性</b>(GLM 上 fake 路径直接 device assert 炸死采集)</td><td>planner 顶格回撤与引擎 skip 二选一或并用</td></tr>
-<tr><td><b>修法②:vocab 越界消雷</b></td><td>引擎/镜像</td><td><b>已烘 gc-vocabfix-20260820</b>(基底 gc-warmtp + 运行时读 vocab_size 双位点替换)</td><td>M2.7 行为面冒烟中</td></tr>
+<tr><td><b>修法②:vocab 越界消雷</b></td><td>引擎/镜像</td><td><b>gc-vocabfix-20260820 已烘且 M2.7 冒烟全绿</b>(四 cell 0 错;fallback 点走修复车间正常完成;warmtp 行为原样)</td><td>GLM 重试镜像前置就绪(还差 B4)</td></tr>
 <tr><td>GLM dep8/tp8 重试</td><td>采集执行</td><td>排队</td><td>前置=vocabfix 双修镜像 + B4 + 深夜复现盖章(盖章须用旧镜像 gc-timing)</td></tr>
-<tr><td><b>tp4 正式重采</b></td><td>采集执行</td><td><b>前置全齐,等用户点火</b></td><td>gc-warmtp + A2(defcc285);RUNBOOK §3 换 tag</td></tr>
+<tr><td><b>tp4 正式重采</b></td><td>采集执行</td><td><b>前置全齐,等用户点火</b></td><td>镜像 gc-warmtp 或 gc-vocabfix(双修,推荐)+ A2(defcc285);RUNBOOK §3 换 tag</td></tr>
 <tr><td>C1 转正式</td><td>aic-core SDK</td><td>env 门控版已入分支</td><td>定默认值 + Rust 同步,随 B1 批</td></tr>
 <tr><td>GLM assert 机制链</td><td>诊断</td><td><b>已升格排他结论</b>:垃圾 KV × GLM 数值病 → NaN → 采样垃圾索引 → embedding 越界</td><td>复现盖章排深夜档;OPEN_ISSUES 有案卷</td></tr>
 <tr><td>T4 发布 / 上游 PR 合并</td><td>发布/上游</td><td>等白名单批准 / 等 maintainer</td><td>—</td></tr>
