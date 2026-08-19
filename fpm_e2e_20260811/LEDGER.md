@@ -60,7 +60,7 @@ etcd+nats+frontend+worker, passive FPM stream (DYN_FORWARDPASS_METRIC_PORT),
 
 | prediction | measured | delta | attribution |
 |---|---|---|---|
-| parquet@(64, 531k..582k) = 15.43..15.72 ms | real steady pure-decode steps (3,836 @ B=64): 16.94..17.22 ms, IQR 0.23 ms | **self-benchmark data systematically FAST by 8.7–9.3%** | uniform across KV → systematic, not noise. Leading suspect: MoE routing entropy (benchmark-seeded requests collapse experts; bench uses random-token prompts). UNRESOLVED — needs a discriminating experiment |
+| parquet@(64, 531k..582k) = 15.43..15.72 ms | real steady pure-decode steps (3,836 @ B=64): 16.94..17.22 ms, IQR 0.23 ms | **self-benchmark data systematically FAST by 8.7–9.3%** | uniform across KV → systematic, not noise. Leading suspect: MoE routing entropy (benchmark-seeded requests collapse experts; bench uses random-token prompts). UNRESOLVED — needs a discriminating experiment. **SUPERSEDED (2026-08-20):** chain closed in R16 — fake-KV content proven and fixed via kvwarm full-grid recollect (tp4 decode 10.43%→4.80%); residual = node heterogeneity 4-6% (clock-guard blind) + truth-content -1.5%; no collection-code regression. See fpm_e2e_20260811/r16/R16_FINAL_REPORT.md |
 | client ITL median 17.23 ms | FPM-stream steady median 17.12 ms | +0.6% | instruments agree (no common-mode error; echoes historical 4.82 vs 4.83) |
 | FPM e2e TPOT 25.57 ms (39.11 tok/s/user) | client TPOT median 27.36 ms | −6.5% | consistent with the −9% data-layer bias partially diluted by mixed-step composition |
 | FPM e2e TTFT 393.7 ms | client TTFT median 783.9 ms | not comparable as-is | client TTFT includes queueing (256 burst arrivals @ C=64) and chunked-prefill interleaving; needs a controlled-admission rerun to compare |
@@ -120,6 +120,9 @@ config across collection phases and deployment, or collect both phases under
 the deployment config. Until then mixed-step prediction is structurally broken
 in that zone; no formula tuning can fix a data-identity mismatch.
 
+> **RESOLVED (2026-08-20):** total-token regime pricing (#1461 task A) landed
+> 2026-08-12 and acceptance-replayed; no config pinning ultimately required.
+
 ## Mixed v2 discriminator + fix validation (2026-08-11 late evening)
 
 **v2 sweep (capture-2048-aligned engine, same 30-window grid):** the -75%
@@ -152,6 +155,9 @@ single-HW — cross-validate (qwen32b, h100) before any lands in the model.
   (temperature experiment, KV-flatness, B-bell-shape) but the final
   discriminator (dense-model control, qwen32b) has not run; the [-5%,-9%]
   entropy band is recorded, not folded into any constant.
+  **SUPERSEDED (2026-08-20):** band attribution closed in R16 (see the
+  Channel A note above; fpm_e2e_20260811/r16/R16_FINAL_REPORT.md); qwen32b
+  dense control cancelled.
 - Prefill small-step ~6ms host floor: measured, unattributed to a specific
   code path (API/detokenize/scheduler serialization candidates).
 - L0 exactness ≠ interpolation ≠ serving fidelity — different rungs, keep
@@ -215,6 +221,8 @@ off-grid MAPE 7.14% — but the structure decomposes exactly:
 | regime-transition rows contaminated | parquet b=513 row 98.70 vs live 87.90 (+12%); parquet (256,4096) row 24.72 vs live 20.88 stable across 3 reps (+18%) | collector (warmup at regime-transition coordinates) |
 | routing-distribution band | everything else lands -4~-9% signed (b=512 -6.9%, anchors -1~-5%), consistent with per-step stream | dense control (qwen32b) pending |
 
+**SUPERSEDED (2026-08-20):** qwen32b control cancelled — superseded by R16 final attribution (fpm_e2e_20260811/r16/R16_FINAL_REPORT.md).
+
 ## Cluster hygiene
 
 TEP4 probe pods deleted after harvest; namespace `yuanli-aic` verified empty.
@@ -274,6 +282,10 @@ pairs. Decomposition probes split them into TWO distinct classes:
   collector QA gate + eager-lattice densification (2304/2560/3072/3584) +
   giant-KV re-run policy (collector PR); dense-model routing control (qwen32b)
   still the open discriminator for the -5~-9% band.
+  **SUPERSEDED (2026-08-20):** no longer open — resolved in R16 (kvwarm
+  recollect + node heterogeneity + truth content); the adjacent giant-KV
+  re-run policy is superseded by the N-step steady-chain median fix
+  (HANDOVER_DYNAMO_FPM §6.3(d)).
 
 ## Acceptance replay — #1461 tasks A/B landed (2026-08-12)
 
@@ -385,6 +397,10 @@ Resolution (owners):
   capture path first, FA split scheduling second);
 - modeling/docs: intrinsic floor documented; interpolation layer NOT at
   fault in this region.
+
+> **OBSOLETE (2026-08-20) per the 2026-08-13 CORRECTION above:** do NOT file
+> the vLLM determinism issue; the fix is the N-step steady chain + median
+> (HANDOVER_DYNAMO_FPM §6.3(d)); the "intrinsic floor" claim is void.
 
 ## Acceptance replay — #1461 round 2 (bracket + prefill bs-clamp), 2026-08-12
 

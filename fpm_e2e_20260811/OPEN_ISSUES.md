@@ -4,20 +4,22 @@
 
 | # | 问题 | 描述 | 出现的地方 | 解法 | 相关 |
 |---|---|---|---|---|---|
-| 1 | 深 KV 点的耗时读数偶发错误 | decode 每点只测一次,耗时=两次输出到达时刻之差,被测步紧挨 1.3s 注入窗口;CPU 侧抖动使读数错 15%~5 倍(kv≳1M 的点 10-30% 中招)。GPU 实际执行稳定(CUDA event 实测 0.4-2.9%),错的只是计时。 | 全部 decode 深 KV 区;parquet kv>1M 673 行(21%)不可信 | 已验证待落地:N 步 steady 链、丢前两步、取中位(净 13 行;104-179%→0.2-1.1%);根治 CUDA event(原型已验证)。详见 HANDOVER_DYNAMO_FPM §6.3 | fpm-selfbenchmark;影响 collect 数据 / modeling 可用行 |
-| 2 | decode 采集值系统性比 serving 快 | Bd32-256 快 11-17%(小 KV 最深 -39%)。来源:①假 KV 内容(零/垃圾,attention 无真实上下文)②运行环境差;采样参数已排除。RANDKV 收回 2-11%,化妆式修补到不了 serving 值。 | 全部 decode 数据 | 部分:RANDKV 一行(已验证未落地);完整对齐=decode 改 serving 态扫段采集(方向已定未落地);残余归因未闭环(dense 对照未做)。详见 §5 | fpm-selfbenchmark;决定 modeling decode 精度上限 |
+| 1 | 深 KV 点的耗时读数偶发错误 | decode 每点只测一次,耗时=两次输出到达时刻之差,被测步紧挨 1.3s 注入窗口;CPU 侧抖动使读数错 15%~5 倍(kv≳1M 的点 10-30% 中招)。GPU 实际执行稳定(CUDA event 实测 0.4-2.9%),错的只是计时。 | 全部 decode 深 KV 区;parquet kv>1M 673 行(21%)不可信 | 已验证待落地:N 步 steady 链、丢前两步、取中位(净 13 行;104-179%→0.2-1.1%);根治 CUDA event(原型已验证)。详见 HANDOVER_DYNAMO_FPM.md §6.3 | fpm-selfbenchmark;影响 collect 数据 / modeling 可用行 |
+| 2 | decode 采集值系统性比 serving 快 | Bd32-256 快 11-17%(小 KV 最深 -39%)。来源:①假 KV 内容(零/垃圾,attention 无真实上下文)②运行环境差;采样参数已排除。RANDKV 收回 2-11%,化妆式修补到不了 serving 值。 | 全部 decode 数据 | 部分:RANDKV 一行(已验证未落地);(更新 08-20)kvwarm 全网格重采已落地实证(tp4 decode 10.43%→4.80%,中段 12%→3.8%);fake_fallback 行以 v6 kv_seed_regime 列记录、SDK env 门控排除(已入分支);残余归因闭环=节点异质性 4-6% + 真值内容 -1.51%,采集代码无回归;dense 对照裁撤。详见 HANDOVER_DYNAMO_FPM.md §5 | fpm-selfbenchmark;决定 modeling decode 精度上限 |
 | 3 | dep 拓扑 batch≈512 数据与部署不符 | 采集全 rank 精确 512 命中 graph(62ms);部署 router 摊派不均必有 rank 越界→全组 eager(111ms),80% 错位。 | dep4/dep8 decode,capture 表边界 | 方案明确待验证:decode capture 表扩到最大并发;前置:owner 拍板部署配置同步扩(配置一致性)。详见 L3_DEP4_RESULTS §5.1 | fpm-collect(引擎配置);vLLM issue |
-| 4 | 少数 cell 失败扣住整个计划发布 | 发布门要求全 cell 通过;注定失败的拓扑让通过 cell 数据发不出。M2.7 9 cell + B200 GLM 5 cell 卡着。 | collector 发布流程 | 有待执行:合入 PR #1475 部分发布 + 撤本地临时补丁 + 执行补发。详见 §6.4 | fpm-collect |
+| 4 | 少数 cell 失败扣住整个计划发布 | 发布门要求全 cell 通过;注定失败的拓扑让通过 cell 数据发不出。M2.7 9 cell + B200 GLM 5 cell 卡着。 | collector 发布流程 | 有待执行:合入 PR #1475 部分发布 + 撤本地临时补丁 + 执行补发。详见 HANDOVER_DYNAMO_FPM.md §6.4 | fpm-collect |
 | 5 | 发布前无数据质量检查 | 物理上不可能的行以 complete 落库,零报错,只能事后人工扫。 | collector 发布 + 自基准落库 | 方案明确未做:落库前耗时下限(同 batch 最小 KV 实测 + 0.5×KV字节÷带宽);发布前单调性粗筛。详见 FIX_DESIGN_KV_GUARD.md | fpm-selfbenchmark + fpm-collect |
-| 6 | mixed(chunked prefill)公式缺陷 | batch 轴跨 512 台阶桥接错误(b=600 +97%);pad-up 台阶语义缺失(+20.9%)。 | modeling mixed/decode 离网查询 | 方案已写(MIXED_FORMULA_SPEC §5)未实现 | fpm-modeling |
+| 6 | mixed(chunked prefill)公式缺陷 | batch 轴跨 512 台阶桥接错误(b=600 +97%);pad-up 台阶语义缺失(+20.9%)。 | modeling mixed/decode 离网查询 | (更新 08-20)batch 轴 regime 分区 + bracket 已实现并验收(#1461,b=600 +97%→-10.6%,LEDGER 'Acceptance replay');剩余仅可选的 pad-up snap 语义。 | fpm-modeling |
 | 7 | prefill 2049-4096 段格点太疏 | 真实曲线下凹,线性插值高估 9-11%。 | prefill 离网查询 | 明确未做:该段加密到 ~512 间隔 | fpm-collect(点阵) |
-| 8 | serving 流步计时偶发借-还 | 相邻两步一慢一快(总量守恒),19 对/96k 步;MAPE 无感,MAX/P95 被假值占据(370% 假 MAX)。 | 所有以 FPM 流做真值的评测 | 缓解已落地(score_l3.py 配对滤波);根治 CUDA event 未做。详见 §6.5 | fpm-selfbenchmark |
-| 9 | regime 边界行偏差未重验 | b=513 行 +12%、(256,4096) +18%,扫程内稳定偏离孤立实测;疑似计时家族,未重验。 | tp4/tp8 decode 个别坐标 | 无独立解法;N 步中位落地重采后顺带验证。详见 §6.2 | fpm-selfbenchmark |
+| 8 | serving 流步计时偶发借-还 | 相邻两步一慢一快(总量守恒),19 对/96k 步;MAPE 无感,MAX/P95 被假值占据(370% 假 MAX)。 | 所有以 FPM 流做真值的评测 | 缓解已落地(score_l3.py 配对滤波);根治 CUDA event 未做。详见 HANDOVER_DYNAMO_FPM.md §6.5 | fpm-selfbenchmark |
+| 9 | regime 边界行偏差未重验 | b=513 行 +12%、(256,4096) +18%,扫程内稳定偏离孤立实测;疑似计时家族,未重验。 | tp4/tp8 decode 个别坐标 | 无独立解法;N 步中位落地重采后顺带验证。详见 HANDOVER_DYNAMO_FPM.md §6.2 | fpm-selfbenchmark |
 | 10 | 两个残余机制未闭环 | ①步1 被额外停顿撑大(15.7%),停顿在 worker→调度器交付链路哪一环未指认;②步10 在 (496,6.55M) 3/10 异常原因不明。 | 自基准测量链 | 绕过已验证(丢前两步+中位);根因没有。低优先级 | fpm-selfbenchmark |
 | 11 | prefill 为何显式关 async | 两侧一致故内部有效;若生产默认 async-on,prefill 代表性可能 1-2% 偏差。 | prefill 引擎参数 | 没有(待查配置来历) | fpm-collect(引擎配置) |
-| 12 | dep 拓扑 L3 工具不可通约 | DP 下单请求/单 blocker 产生不均衡步,与采集坐标系不可比;深 KV 阶梯测不了(prefill kv 只到 98k)。 | dep4/dep8 L3 验证 | 方案明确未做:请求数预乘 DP、每 rank 等重 blocker、长请求按 DP 并发。详见 L3_DEP4_RESULTS §3 | 评测工具(L3 kit) |
+| 12 | dep 拓扑 L3 工具不可通约 | DP 下单请求/单 blocker 产生不均衡步,与采集坐标系不可比;深 KV 阶梯测不了(prefill kv 只到 98k)。 | dep4/dep8 L3 验证 | (更新 08-20)kit 已更新并跑通 dep4:decode 真值驱动默认 ShareGPT(decode_driver.py,bench 回退);同机协议 PIN_NODE;dep4 尾链双跑已拆;dep4 decode 终审 2.42%(产品)/2.75%(手工)。 | 评测工具(L3 kit) |
 
-优先级:#1/#4 解锁被卡数据(解法已备好);#2/#3 决定 decode 天花板(各需一个 owner 决策);其余为质量加固与机制尾巴。
+(kvwarm=decode 采集用 prefix caching 以真实内容逐段预热 KV 的机制,替代假 KV;warm 不可达点回退 fake 并记 kv_seed_regime)
+
+优先级:#1/#4 解锁被卡数据(解法已备好);(更新 08-20)#2 已决策落地(10.43%→4.80% 实证);仅 #3(dep capture 表扩展)仍待 owner 决策;其余为质量加固与机制尾巴。
 
 ## 附:timing.phases 消费契约(rev2 镜像,2026-08-18 通报存档)
 
@@ -32,7 +34,7 @@ seed_total_s / import_to_first_bench_activity_s,以及每键 *_n(调用次数)
 - content_gen_s ⊃ 池构建(首调用)⊃ dataset_load_s + tokenizer_load_s;
 - kvwarm.stages[].build_seconds ⊃ content_tokenize_s。
 
-run-manifest 四段拼法(R16 §3 的落地口径):
+run-manifest 四段拼法(r16/R16_FINAL_REPORT.md §3 的落地口径;r15/R16=第 15/16 轮 H200 采集-验证战役,档案 fpm_e2e_20260811/r16/):
 - engine_launch_s = 进程拉起 → started_at(collector 外测段);
 - kvwarm_warmup_s = Σ kvwarm.stages[].build_seconds;
 - inference_s = timing.measured_iteration_seconds;
@@ -43,7 +45,7 @@ run-manifest 四段拼法(R16 §3 的落地口径):
 collector 侧 run-manifest 聚合按此树实现(未知键容忍已具备);落点=
 #1475 合并后的紧随 commit,与 DYN_BENCH_PREFILL_CONTENT 产品侧透传同批。
 
-## 附:R16 验收首轮产品缺陷(2026-08-18;缺陷1/2 已提前修复:@8b5d4399 全反转 → @8552f522 按验收方更正条件化(decode+tep/dep 不禁 prefix caching,decode+pure_tp/dense 维持禁——fake 制度下 admission 哈希污染真实存在,禁=serving-faithful;timeout 无条件 10800),挂 #1475 栈顶——验收方证实 CLI 白名单只放 K8sConfig、无用户侧引擎参数逃生口,绕行不存在,默认值是唯一修法)
+## 附:R16 验收首轮产品缺陷(2026-08-18;缺陷1/2 已提前修复:@8b5d4399 全反转 → @8552f522 按验收方更正条件化(decode+tep/dep 不禁 prefix caching,decode+pure_tp/dense 维持禁——fake 制度下 admission 哈希污染真实存在,禁=serving-faithful(终审更正 08-20:tp4 fake 制度坐实 -15.3%,kvwarm 重采实证 10.43%→4.80%——pure_tp 维持禁的方案作废;A2=对 warm-eligible 拓扑全面撤 pin,dense 维持禁。);timeout 无条件 10800),挂 #1475 栈顶——验收方证实 CLI 白名单只放 K8sConfig、无用户侧引擎参数逃生口,绕行不存在,默认值是唯一修法)
 
 归属更正:两项均为 collector 侧渲染参数(#1475 代码),非 generator 模板。
 

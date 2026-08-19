@@ -9,6 +9,14 @@
 exec-cat + 双端 sha256、取件一律分块 sha(大件 gzip)。打分统一
 `fpm_verify/scoring/score_decode.py`,真值见 fpm_verify/harvest 方法论。
 
+> 术语速查:**拦路石**=先发的长驻大请求,占住引擎/各 DP rank 使被测请求
+> 同一调度步进场;**毒行**=`sample_reasons` 含 fake_fallback 的库行(每档
+> kv 顶格点因真实 KV 链放不下回退假 KV,值虚高 ×2-3.7);**r14/r15**=更早
+> 两轮手工链战役(r14-native 的 1.70% 为采集与真值同节点同 boot 的产物);
+> **中段高误差带**=tp4 修复前 10万~150万 kv 的 ~12% 误差区。
+> E1-E10 的原始两臂 benchmark 已归档 raw/*.json.gz,判决汇总表=
+> ../R16_FINAL_REPORT.md 三-0b。
+
 ## E1 锻炼态 vs 新鲜态(判决:排除,+0.21%)
 
 1. 点单:`../points_regime_arm1.json`(171 小坐标)/`arm2`(=arm1 ⊕ 9505 prefill);
@@ -17,25 +25,26 @@ exec-cat + 双端 sha256、取件一律分块 sha(大件 gzip)。打分统一
    (bench 引擎写完 benchmark.json 不自退,轮询 "merged results" 后 pkill)
    → `regime_arm.sh arm2`(--benchmark-mode agg,复刻 r15 锻炼态);
 3. 分析:两臂 benchmark.json 逐坐标中位 wall 配对,(arm1−arm2)/arm2。
+   产物:raw/E1_arm1_fresh.json.gz、raw/E1_arm2_exercised.json.gz。
 
 ## E2 CPU 配额(判决:排除,+0.03%)
 
 同 E1 的 arm1,唯二差异:pod 规格 `k8s_qos.yaml`(cpu 56/256Gi
 requests=limits,与产品 cell 同规格)+ nodeAffinity 钉死同一节点。
-链:`qos_chain.sh`。对照 = E1 的 arm1(同节点无配额)。
+链:`qos_chain.sh`。对照 = E1 的 arm1(同节点无配额)。产物:raw/E2_qos_arm1.json.gz。
 
 ## E3 节点异质性(判决:坐实,4-6%)
 
 同一份 arm1 点单在第三台节点重跑(tp4_chain.sh 链首集成),三节点
 两两对照 + 各自对 r14 库/R16 库的存值(parquet latency_ms 直读)。
-判据:实测贴哪个库、批量形状(小批重、随批量衰减)。
+判据:实测贴哪个库、批量形状(小批重、随批量衰减)。产物:raw/E3_node3_arm1.json.gz。
 
 ## E4 噪声注入因果(判决:CPU 争抢机制坐实)
 
 `noise_arm.sh noisy`:引擎启动前在**本 pod 内**起 48 个 shell 自旋 +
 4 个 dd(记录 /proc/loadavg 首尾佐证噪声在场),同点单重测;对照 =
 同节点 quiet 臂。签名复现判据:小批膨胀(b=1 +8.3%)随批量衰减归零。
-机器域结论只入工作记忆,不入 aic(用户裁定)。
+机器域结论只入工作记忆,不入 aic(用户裁定)。产物:raw/E4_noisy.json.gz(对照=E3 同节点 quiet 臂)。
 
 ## E5 池边毒行边界二分(判决:制度翻转=值跳变)
 
@@ -44,14 +53,14 @@ requests=limits,与产品 cell 同规格)+ nodeAffinity 钉死同一节点。
 3. 判据:warm 臂逐点 sample_reasons(real_kv/fake_fallback)与 wall 的
    跳变位置是否逐档重合(实测 kv 差 0.2% 处 63.1→125.0ms 同步翻转);
    fake 臂全段读数对照(105-127ms,连 2.2M 都虚高)。
-4. 历史互验:全零时代库(aic-core 树内,08-12 前)同坐标 48-85ms 且非单调
+4. 历史互验(产物:raw/E5_edgewarm/edgefake.json.gz):全零时代库(aic-core 树内,08-12 前)同坐标 48-85ms 且非单调
    → fake 巨 kv 跨时代不可复现。
 
 ## E6 真值池内容 ABA(判决:random 偏快 −1.51%)
 
 1. serve 栈(etcd/nats/frontend/listener + kit decode-parity 引擎,
    prefix caching 关)= `content_chain.sh`;
-2. 驱动 `content_decode_driver.py`(l3v2 驱动 + L3_CONTENT 开关:
+2. 驱动 `content_decode_driver.py`(l3 锁步收割驱动 v2(lockstep decode 真值驱动,kit decode_driver.py 的前身) + L3_CONTENT 开关:
    sharegpt=奇数池 / random=均匀 token;拦路石两臂同为 ShareGPT,单变量);
 3. 计划 `content_plan.csv`(异常点 6 格:b6 浅/深、b20@16k、b513 eager、
    b512 容量边、b32 对照);三遍 ABA(sharegpt→random→sharegpt2);
@@ -60,19 +69,19 @@ requests=limits,与产品 cell 同规格)+ nodeAffinity 钉死同一节点。
 
 ## E7 tp4 fake vs warm 最小机制实验(判决:−15.3%)
 
-1. 点单 `../points_tp4_minexp.json`(24 个鼓形带网格点);
+1. 点单 `../points_tp4_minexp.json`:修复前误差隆起的中段网格 24 点(b 16~128 × kv 4k~2.35M);
 2. `tp4_chain.sh`:fake 臂(tp4 cell 逐字命令,唯一受控偏离=去掉
    --no-enable-prefix-caching,两臂同开)→ 制度断言
    (warm_eligible=False/moe_tp_balanced_by_construction)→ **一行 sed**
    `s/elif not ep_enabled:/elif False and not ep_enabled:/` 放行 →
    warm 臂 → 断言 warm_eligible=True;
-3. 同机逐坐标配对。修复收益 14 真值配对点:19.94%→2.52%
+3. 同机逐坐标配对(产物:raw/E7_tp4_fake/warm.json.gz)。修复收益 14 真值配对点:19.94%→2.52%
    (`../tp4_fix_beforeafter.csv`)。
 
 ## E8 tp4 全网格 kvwarm 重采(修复终态 10.43%→4.80%)
 
 1. 点单 `../points_tp4_fullgrid.json`(现库全部 1557 个 decode 格点);
-2. E7 的 sed + `tp4_arm.sh warm` 全网格(预热链 ~102 档,~2h);
+2. E7 的 sed + `tp4_arm.sh warm` 全网格(预热链 ~102 档,~2h;产物 raw/E8_tp4_fullgrid_warm.json.gz);
    产出统计:real_kv 1455 / fake_fallback 102(全部为各档顶格点);
 3. 建修复库:同网格值替换 + kv_seed_regime 列 + sidecar parquet_sha256
    重算(网格不变→快路径保留);

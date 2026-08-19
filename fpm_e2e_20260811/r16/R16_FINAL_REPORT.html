@@ -5,7 +5,7 @@ th{background:#f4f7f0}img{max-width:100%;border:1px solid #eee;margin:6px 0}
 h1{border-bottom:3px solid #76b900;padding-bottom:6px}h2{border-bottom:2px solid #76b900;padding-bottom:4px;margin-top:34px}
 .pass{color:#2e7d32;font-weight:700}.miss{color:#c62828;font-weight:700}.case{color:#e65100;font-weight:700}
 small{color:#555}code{background:#f5f5f5;padding:1px 5px;border-radius:3px}</style></head><body>
-<h1>R16 验收终版报告 — 纯 AIC 命令端到端</h1>
+<h1>R16 验收终版报告 — 纯 AIC 命令端到端</h1><div style="border:2px solid #b45309;background:#fef3c7;padding:10px 14px;margin:10px 0;border-radius:6px"><b>阅读指引(2026-08-20)</b>:第 1~6 章为 08-19 战役当日版本(含当时的临时数字与假设);<b>终审数字与六案判决以第 7 章为准</b>——dep4 decode 2.42%/2.75%(旧值 2.55/2.85 作废);tep4 decode 4.00%(排除毒行 3.72%,缺口=节点异质性+真值内容,非采集回归);tp4 decode 10.43%→修复实证 4.80%;全零输入时代库 9.99%(旧称「随机KV」系勘误)。MD 版 R16_FINAL_REPORT.md 已同步终审。</div>
 <p><b>H200 × MiniMax-M2.7 四卡全并行</b>(tep4 / dep4 / tp4)+ <b>B200 × GLM-5.2-FP8</b>(tep8)<br>
 <small>2026-08-19 · 代码树 68707ffb(main ⊕ #1473 ⊕ #1475 ⊕ 3 修复)· 镜像 gc-timing-20260818(digest adcd28a9…8c48)· 真值 = fpm_verify 独立套件(ShareGPT 奇数池,parity serving)</small></p>
 

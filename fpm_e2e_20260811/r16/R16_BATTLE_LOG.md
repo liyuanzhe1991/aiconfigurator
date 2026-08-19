@@ -1,12 +1,14 @@
 # R16 验收仗 — 作战序列与战报(H200×MiniMax-M2.7 四卡全并行,纯官方命令)
 
-代码树:r16-acceptance 分支 @ dfc7896d(= 最新 main + #1473 delta @82d83e50 +
+代码树:r16-acceptance @ 68707ffb(起跑 dfc7896d,验收中三修复 8b5d4399/8552f522/68707ffb 落树)(= 最新 main + #1473 delta @82d83e50 +
 #1475 collector 栈;origin/main 为其祖先,无需三方合并)。
 镜像:nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818
 (digest adcd28a9…8c48;含 kvwarm+内容池 v4+argsdump+timing.phases)。
 集群:nebius-2(H200),namespace yuanli-aic,PVC model-cache。
 规格:../R16_ACCEPTANCE_SPEC.md;命令面出处:集成分支 scripts/experiments/README.md
 (开发 session 撰写的字面命令,本文仅改 4 卡形状)。
+
+终局(2026-08-20):六案判决与终审记分牌见 R16_FINAL_REPORT.md 与 experiments/EXPERIMENTS_STEPBYSTEP.md——dep4 decode 2.42%(产品)/2.75%(手工,旧值 2.55/2.85 作废);tep4 decode 4.00%(排除毒行 3.72%),缺口=节点异质性 4-6%+真值内容 −1.5%,采集代码无回归;tp4 decode 10.43%→修复实证 4.80%;tep4 prefill 3.93% PASS;dep4 prefill 4.62%;tp4 prefill 4.59%。
 
 ## 0. 环境(一次)
 
@@ -66,15 +68,18 @@ forward 预测,要求 exact model/system/backend/version 的 fpm_forward 数据)
 指向新库用官方环境变量 `AICONFIGURATOR_SYSTEMS_PATH`(engine.py:1191 /
 rust_engine_step.py:883 的官方解析链)。判据:消费 C2 parquet 出预测,与
 r15 库同坐标对拍一致。
+(r15=2026-08 中旬上一轮手工链采集的对照库,同模型同硬件;本轮 R16 为纯产品命令链)
 
 ## C4 对齐(fpm_verify,独立套件,不属于 aic)
 
 奇数池真值,parity serving(stock 捕获),per ../../fpm_verify/VERIFY_RUNBOOK.md:
 - decode:make_l3_plan → l3_decode_driver(tep4/dep4)
+  (后记 08-20:kit decode 真值驱动现默认 decode_driver.py——ShareGPT 奇数池、v3 九列窗带 lockstep 标;L3_DECODE_DRIVER=bench 回退本节旧路径;另同机协议 PIN_NODE 生效,真值必须与采集同节点,跨机 ±3-4% 地板仅参考)
 - prefill:burst_driver(tep4;dep4 范围外照出不判)
 - 打分:score_decode / score_prefill_burst(--new-root=C2 parquet root,
   --old-root=r15 库)→ 散点 + 报告
 判据:tep4/dep4 decode ≤2.0%,tep4 prefill ≤5.5%;tp4 首跑记档。
+(后记 08-20:2.0% 门只在采集与真值同机时可判——r15 的 1.70% 即同节点同 boot 产物,跨机地板 ±3-4%;终审记分牌见 R16_FINAL_REPORT.md)
 
 ## 耗时地图(§3)
 
@@ -174,11 +179,14 @@ tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
   r15 采集 resolved-config = 512,r15 真值 serve resolved-config = 512,
   R16 产品采集 = null。violate R11-P0 parity 规格。我此前把根因猜到同步器,
   已更正——参数缺失才有硬证据。
+  (R11-P0=早前第 11 轮定下的 P0 级 parity 硬规格:采集 serving 的 resolved-config 必须与真值 serving 完全一致)
 - 验证性本地补丁:runner.py dep 策略 decode/prefill 渲染补
   `--max-num-seqs 512`(注明正式修法=按模型 parity 策略层,归 collector dev);
   dep4 重采至独立 verify 库根(病节点已拉黑),打分与制度指纹双验证中。
+  (后记:验证完成——该参数是 parity 卫生缺陷但非精度原因;dep4 decode 终审 2.42%/2.75%)
 - 真值污染案(tep4):+7.65% 均匀系数 = 锁频病卡(clock-guard 现场抓获
   GPU0@1590MHz);守卫已烤进采收方法论,病节点拉黑,tep4 全量重采中。
+  (后记:重采完成——tep4 prefill 3.93% PASS;tep4 decode 4.00%/排除毒行 3.72%,缺口定罪节点异质性+真值内容,非采集回归)
 - dep4/tp4 真值节点健康(守卫过),dep4 真值干净(旧库 2.85% 佐证)。
 
 ## 缺陷5 案终审(2026-08-19 午后)——40% 是打分器假伤
@@ -192,6 +200,7 @@ tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
 - **修正后 dep4 decode:R16 产品库 2.55%,r15 旧库 2.85%(同真值同口径)
   ——产品链复现且略优于手工链。** 2.0% 门槛两库同超 ~0.6-0.9%,指向真值侧
   残余环境浮动(采收节点不可考);安排守卫过的 dep4 pod 重采 decode 真值终审。
+  (后记:终审真值〔守卫节点,26.7 万坐标〕落定——产品 2.42%、手工 2.75%,2.55/2.85 作废;数据 scores/scores_dep4_decode_final.csv.gz)
 - r15 制度指纹对比(66% eager)系 agg 模式合并档与产品分 cell 档的
   错位比较,不构成证据;dep4 eager 常态档案维持为 serving 观察,不再驱动
   采集制度改动。
@@ -201,6 +210,7 @@ tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
 - 事实:R16 两轮独立 boot(fake 轮/预热轮)decode 小坐标均偏快 6-8%;
   r15 旧库对同一新真值仅偏 −1%。两轮同向 → 结构性,非单 boot 彩票,
   缺陷6(多 boot 中位)最多解释波动幅度,不解释方向一致。
+  (缺陷6=库值取自单次 boot、无多 boot 中位聚合的候选缺陷编号;后经判别实验对小批段的解释力被排除)
 - r15 报告对照确认:当年 1.70/1.60% 为"同会话真值"(r14-native
   single-session,库与真值共享节点/日期/boot 生态);跨环境后旧库为
   2.82-2.97%,红利 ~1.1pp。real-vs-fake 压倒性在中大 kv 主场复现
@@ -211,6 +221,7 @@ tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
   (-000 vs -001,resolved-config gpu_info 实录)。
 - 判别实验(待用户拍板):同 boot 内"9505 prefill 后 decode"(复刻 agg 态)
   vs 新鲜态 decode-only 同坐标对拍,~1.5h。
+  (后记:判别实验已完成——E1 同机两臂 171 点配对,新鲜/锻炼态 +0.21%,本嫌疑排除;E2 CPU 配额 +0.03% 亦排除;真因=节点异质性,健康节点间 4-6%,时钟守卫盲区,E3 坐实、E4 噪声注入因果复现。见 experiments/EXPERIMENTS_STEPBYSTEP.md 与 R16_FINAL_REPORT.md 三-0b)
 - 附:resolved-config 全字段 diff 闸首跑即产出(737 字段,剔噪 14 差异),
   另暴露 R16 未显式设 DYN_BENCH_KV_WARMUP(依赖引擎默认开)与 UCX/NIXL
   env 缺失(单节点无害,进 parity 清单)。

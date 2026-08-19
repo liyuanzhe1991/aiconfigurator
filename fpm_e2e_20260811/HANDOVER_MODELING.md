@@ -3,6 +3,9 @@
 > **状态更新(2026-08-12 晚)**:任务 A 已在 #1461(`fpm-modeling-rust`)完成并推送
 > (公式 commit `74de0ff6`,随后 `0ba8dff2` 合入了含 #1384/#1474/#1496 的最新 main,
 > CI 19/19 绿)。**剩余工作 = 任务 B + 任务 A 的验收网格复放**(§1.5)。
+> (更新 08-20:两者均已落地并过验收——任务 B regime 分区 #1461 landed,
+> 悬崖点全 PASS;验收复放见 LEDGER 'Acceptance replay' 与 'Strict
+> three-phase validation'。本文档余下价值=设计与机理记录。)
 > 分支拓扑已变:#1384(Python modeling)与 #1474(generator)已合入 upstream main;
 > #1461 现在是纯 Rust 增量,基于最新 main。后续改动**直接在 `fpm-modeling-rust`
 > 分支做**(fpm-all-20260811 集成分支已落后,仅作实验复放用)。
@@ -66,7 +69,10 @@
 任务 B 若动 Rust 混合路径,两处都要看。SPEC §3 五类单测已双侧落地
 (悬崖跨界/图内/无重复计费/多 chunk 平均/退化),parity 368 绿。
 
-### 1.5 任务 A 剩余:验收网格复放(未做)
+### 1.5 任务 A 剩余:验收网格复放(已做,见下注)
+
+(复放已完成:跨界行 -39~-46% → +16~+25%,grid median|δ| 13.22%,与 SPEC
+预演一致;门限全绿仍依赖 collector eager 加密。)
 
 `mixed_validation_v2_cap2048.csv` 复放与"新 parquet 全网格 median|δ| ≤ 8%"
 尚未在真数据上复现(单测用的是 synthetic 悬崖夹具)。做法:randtok parquet
@@ -75,6 +81,9 @@ median|δ| ≤ 8%(新数据,离线预演 5.4%)。注意 §3 的联动依赖:eage
 加密(collector 侧)未做前,mixed 会继承 -10% 段误差。
 
 ## 2. 任务 B — decode 批轴 regime 分区(新,机制已钉死)
+
+(已于 2026-08-12 落地并通过验收门,LEDGER 'Acceptance replay — #1461':
+悬崖点 |δ|≤12% 全 PASS;本节保留为设计记录。)
 
 ### 病灶(数值复现分毫不差,勿再猜)
 
@@ -216,6 +225,9 @@ b>1024 frontier 保留、Rust parity。
   (`probes_v2_scores.csv` 里 tp8 (256, 5375744) 一点),并在 PR 描述里注明。
 - decode 全局有 -5~-9% 路由分布带(真实文本路由偏斜 vs benchmark 均匀随机;
   dense 对照未做)。**不要**为它加任何常数补偿——它是数据层问题,留给后续。
+  (终审归因 08-20:该带主体=假 KV 内容〔kvwarm 修复实证 tp4
+  10.43%→4.80%〕+ 节点异质性 4-6% + 真值内容 -1.5%;dense 对照裁撤;
+  「不加常数补偿」结论仍成立。)
 - `FPMForwardOp.clear_cache()` 会清 perf_interp 站点索引缓存;切表后确认缓存键
   仍按 id(data) 正确失效(两张子表是两个 dict,天然不同 key,应无事,但测一下)。
 - 本地 CI 清单(过了再推):codeowners strict / import contract / public-api

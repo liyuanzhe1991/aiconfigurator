@@ -123,6 +123,9 @@ nvcr-push-secret 只挂载在 pod 内,凭证不落本机)。runbook Appendix B �
   真实负载下的 bubble、采样 token 回填/输出队列路径、benchmark lockstep
   单点无可重叠对象导致测得更"裸"。**GPU 事件审计升为第一优先**;
   剩余判别:②qwen32b dense 对照(无路由,剩余=纯环境差)。
+  (已被终审取代 08-20:内容成分经 kvwarm 修复实证 tp4 10.43%→4.80%;
+  环境成分坐实为节点异质性 4-6%,噪声注入因果复现;GPU 事件审计与
+  dense 对照均裁撤。)
   另记:prefill 为何显式关 async 待考——若生产 prefill 默认 async-on,
   prefill 采集+验证虽两侧一致,但对生产代表性可能有 1-2% 级偏差。
   **RANDKV A/B 判决实验(2026-08-12,probes_temp/benchmark_{zero,rand}.json)**:
@@ -153,7 +156,7 @@ nvcr-push-secret 只挂载在 pod 内,凭证不落本机)。runbook Appendix B �
   修 token、RANDKV 修内容、warm 修链,每级收一点但全都到不了);此前
   "残余≈纯分布成分"的拼图闭合作废(把 serving 侧爬坡映射到基准侧不成立),
   残余在"内容结构 vs 机器/环境"之间**重新悬置**,GPU 事件审计与 dense
-  对照恢复优先级。
+  对照恢复优先级。(已不悬置:两项均坐实,见上。)
   **SIGSTOP 逐段冻结剖析(2026-08-13,host_probe/results/sigstop_*.tsv)——
   下游全体无罪,投递链假说阵亡**:C=32 稳态池上依次 SIGSTOP 客户端(8s)/
   前端(8s)/worker 父进程(5s),逐 0.5s 记录引擎步频与四进程 CPU
@@ -180,7 +183,11 @@ nvcr-push-secret 只挂载在 pod 内,凭证不落本机)。runbook Appendix B �
   结论:**gap 的残余与采样参数无关,全部落在"内容基座(真 KV vs 假 KV)
   + 机器/环境"两项之间**。实践结论反而更硬:**decode 采集的对齐路径 =
   serving 态扫段(③)**,网格直采 20 锚点即活证据;fake-decode 仅保留给
-  扫段够不着的巨 KV 区(带 RANDKV + 多启动 + 如实记账)。**不要用常数补偿。**
+  扫段够不着的巨 KV 区(带 RANDKV + 多启动 + 如实记账)。
+  (终态更新 08-20:落地形态=kvwarm 全网格采集;warm 不可达点回退 fake
+  并以 v6 kv_seed_regime 列记账,SDK 按 FPM_EXCLUDE_FAKE_FALLBACK 排除;
+  真值池 caveat:random 内容偏快 -1.51%,verify kit decode 驱动已默认
+  ShareGPT。)**不要用常数补偿。**
   (证据:l3_harvest_tep4/ + probes_temp/{benchmark_warm15.json,
   benchmark_warm15b.json, tp_t1raw2.log};网格直采锚点表见 grid_windows)
 
@@ -250,6 +257,8 @@ nvcr-push-secret 只挂载在 pod 内,凭证不落本机)。runbook Appendix B �
    ——唯一变量是该点之前跑了什么。另 (256,4096) 是**捕获形状**,eager
    warmup 根本不适用,照样 +18%。结论:步延迟对执行历史敏感
    (graph 池/分配器状态),与 §6.3 巨 KV 抽签疑似同族。
+   (降级为怀疑:R16 锻炼态判决 +0.21% 排除了执行历史的量级效应;
+   OPEN_ISSUES 已将本条归入疑似计时家族,待 N 步中位重采后重验。)
    **修法**:标记坐标复测取中位(多启动或扫程内隔离重测);
    加大 warmup 无效,勿做。
 3. **巨 KV 区读数发散:自基准单步测量的问题,不是引擎行为(2026-08-13

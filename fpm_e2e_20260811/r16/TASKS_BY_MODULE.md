@@ -4,7 +4,7 @@
 > 每项均有实验实证背书,证据指针:R16_FINAL_REPORT.html 第 7 章、
 > experiments/EXPERIMENTS_STEPBYSTEP.md(E1-E9)、r16/scores/*.csv.gz。
 > 本表是分工派单的唯一权威版本(v2,取代 4c8ef871 的 v1);裁撤项列在文末,不要复活。
-> 分工现状:B1 已派单(由本 session 承接实现);A 组由 merge-test session 承接;
+> 分工现状:B1 移交专职 session(aic-collector-generator-decoupling-1b);A 组由 merge-test session 承接(A2 渲染改动已起头,镜像 tag 计划 gc-warmtp-20260820);
 > C1 已实现入分支;D 组已全部完成(3dbc65e8/a2e5056a/6040ecbc),**勿重做**。
 
 ## A. 引擎/镜像(dynamo-fpm kvwarm 补丁层)
@@ -13,7 +13,12 @@
 `_kvwarm_warm_eligible` 里 `elif not ep_enabled: skip("moe_tp_balanced_by_construction")`
 分支删除(dense 的 skip 保留——dense 无 expert,真物理免疫)。
 实证:同机 fake/warm 24 点 −15.3%(E7);全网格重采 tp4 decode 10.43%→4.80%
-(E8,含中段 12%→3.8%、巨段 1.51%)。交付=烘进正式镜像。
+(E8,含中段 12%→3.8%、巨段 1.51%)。
+**状态(08-20)**:镜像已烘 `gc-warmtp-20260820`
+(digest sha256:2cc6444956a624ada9f9c60ab8d8cbedcfeedba1bbd1ee1eb6406f1d86e91424,
+基底 gc-timing-20260818 + 单层手术,dense/prefix 守卫保留)——**待冒烟判决**
+(全新拉取 + 24 点 tp4 零补丁冒烟,期望 warm_eligible=True);冒烟过后方可
+按 RUNBOOK 走产品链正式重采 tp4。A2 配套渲染改动在 r16-wt defcc285。
 
 **A2|渲染撤 pure_tp 的 prefix-caching pin(A1 联动)**
 缺陷1 条件化修复把 pure_tp 归入"禁 prefix caching"侧;开 warm 后 tp4 必须

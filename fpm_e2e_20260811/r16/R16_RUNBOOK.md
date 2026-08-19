@@ -1,5 +1,7 @@
 # R16 复现手册 — H200×MiniMax-M2.7 四卡全并行,纯 AIC 官方命令(2026-08-18 实测)
 
+> **终审指针(2026-08-20)**:按本文采出的数据,对齐终审与六案判决见 R16_FINAL_REPORT.md——tep4 prefill 3.93% PASS;dep4 prefill 4.62%;dep4 decode 2.42%(产品)/2.75%(手工);tep4 decode 4.00%(排除毒行 3.72%,缺口=节点异质性 4-6%+真值内容 −1.5%,非采集回归);tp4 prefill 4.59%;**tp4 decode 按本文命令采出的是 fake 回退制度数据(10.43%),修复后实证 4.80%,见 §8**。
+
 任何人按本文逐字执行可复现"采集→建库→预测"。对齐(C4)属独立 fpm_verify
 套件,另见 ../../fpm_verify/VERIFY_RUNBOOK.md。
 
@@ -10,7 +12,7 @@
 | 代码树 | r16-acceptance @ **68707ffb**(= 最新 main ⊕ #1473 delta @82d83e50 ⊕ #1475 @dfc7896d ⊕ 三修复 8b5d4399/8552f522/68707ffb) |
 | 引擎镜像 | `nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818` |
 | 镜像 digest | `sha256:adcd28a943c7811e71931a4c154d31cb95d126469bc9b4fe2a8981f5327e8c48` |
-| 镜像内容 | kvwarm 11 手术 + 真实内容池 v4(ShareGPT 偶数池)+ argsdump + timing.phases 相位仪表(零测量开销,5-boot 验证) |
+| 镜像内容 | kvwarm 引擎补丁集(11 处引擎改动:decode 测量前用真实文本构建 KV 链,替代全假 KV) + 真实内容池 v4(ShareGPT 偶数池)+ argsdump + timing.phases 相位仪表(零测量开销,5-boot 验证) |
 | 模型 | MiniMaxAI/MiniMax-M2.7(fp8_block,227.69B,snapshot d494266a4affc0d2995ba1fa35c8481cbd84294b) |
 | 集群 | nebius-2(H200 ×8/节点),namespace yuanli-aic,PVC model-cache |
 | backend | vllm,库版本 0.25.1 |
@@ -127,7 +129,16 @@ $PY -m aiconfigurator.main cli estimate \
 sha256 清单 `artifacts/SHA256SUMS.txt`。原始 benchmark JSON(25-52MB/cell)
 留 scratch/PVC,sha 记录于各 run-manifest。
 
-## 8. 已知边界(验收发现,修复在途)
+## 8. 已知边界(验收发现,修复在途;08-20 终审补两条数据级缺陷)
+
+**(a) tp4 decode 数据为 fake 回退制度**:本文 §3 命令逐字采出的 tp4 decode
+库,因引擎 kvwarm 对 moe_tp 跳过 + 渲染对 pure_tp pin --no-enable-prefix-caching,
+全网格为零上下文假 KV 测量,定罪偏差 −15.3%(真值 MAPE 10.43%)。修复=
+A1(kvwarm 删 moe_tp skip)+A2(渲染撤 pin),修复后全网格重采实证 4.80%,
+待烘正式镜像后按本文流程重采转正。**(b) 各批量档 kv 顶格点回退假 KV 形成
+毒行**(虚高 ×2-3.7,插值放大巨段 ~7%):修复=B1(v6 kv_seed_regime 列)+
+C1(SDK FPM_EXCLUDE_FAKE_FALLBACK=1 排除,已入分支)。证据:
+../R16_FINAL_REPORT.md 第 7 章、experiments/EXPERIMENTS_STEPBYSTEP.md E5/E7/E8/E9。
 
 - 缺陷1-3(prefix-caching pin / timeout / 校验器顺序断言):已修
   (8b5d4399/8552f522/68707ffb),随 #1475 走。
