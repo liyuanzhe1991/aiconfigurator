@@ -165,3 +165,18 @@ decode(static_gen, bs=32, ctx=2048):tep4 59.7 tok/s/u;dep4 34.5×128 并发
 (seq/s 17.3 最高);tp4 75.3 tok/s/u 单步最快。
 物理自洽:dep prefill 单请求慢×并发补吞吐(印证"没人用 dep 做 prefill");
 tep4≈tp4 prefill(计算主导);decode 三形排序符合通信/路由结构。
+
+## 缺陷5(用户抓获)+ dep4 decode 40% 案(2026-08-19)
+
+- 现象:R16 dep4 decode 对干净真值 MAPE 40.8%(旧库 2.85%),signed 全段
+  −37~−46%;制度指纹翻转(r15 采集 eager 66% → R16 采集 capture 97%)。
+- **用户指出真凶**:产品渲染丢失 parity 超参 `--max-num-seqs`。三方对证:
+  r15 采集 resolved-config = 512,r15 真值 serve resolved-config = 512,
+  R16 产品采集 = null。violate R11-P0 parity 规格。我此前把根因猜到同步器,
+  已更正——参数缺失才有硬证据。
+- 验证性本地补丁:runner.py dep 策略 decode/prefill 渲染补
+  `--max-num-seqs 512`(注明正式修法=按模型 parity 策略层,归 collector dev);
+  dep4 重采至独立 verify 库根(病节点已拉黑),打分与制度指纹双验证中。
+- 真值污染案(tep4):+7.65% 均匀系数 = 锁频病卡(clock-guard 现场抓获
+  GPU0@1590MHz);守卫已烤进采收方法论,病节点拉黑,tep4 全量重采中。
+- dep4/tp4 真值节点健康(守卫过),dep4 真值干净(旧库 2.85% 佐证)。
