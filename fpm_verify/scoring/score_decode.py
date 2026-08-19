@@ -37,13 +37,19 @@ DP = 4 if args.topo == "dep4" else 1
 MOE_TP = 4 if args.topo == "tp4" else 1
 MOE_EP = 1 if args.topo == "tp4" else 4
 
-def make_query(root):
+def make_query(root, native_identity=False):
+    # 身份口径:r15 手工库把 dep4 发布为 tp4 形(先例:score_l3_dp.py);
+    # R16 产品库按真实拓扑发布(dep4 = tp1/dp4/ep4)。native_identity=True
+    # 用于产品库。
     perf_database.set_systems_paths([root])
     db = perf_database.get_database(args.system, args.backend, args.backend_version)
     FPMForwardOp.clear_cache()
+    if native_identity and args.topo == "dep4":
+        tp_s, adp_s = 1, 4
+    else:
+        tp_s, adp_s = 4, 1
     cfg = sdk_config.ModelConfig(
-        # dep 库的既定查询口径 = tp4 形身份(先例:score_l3_dp.py)
-        tp_size=4, pp_size=1, attention_dp_size=1,
+        tp_size=tp_s, pp_size=1, attention_dp_size=adp_s,
         moe_tp_size=MOE_TP, moe_ep_size=MOE_EP, cp_size=1,
         gemm_quant_mode=common.GEMMQuantMode.fp8_block,
         moe_quant_mode=common.MoEQuantMode.fp8_block,
@@ -148,7 +154,7 @@ print(f"真值坐标 {len(truth)} 个(score-what-forms);"
 # 两个 root 不能共存缓存:逐侧构建、即时批量查询、暂存后配对
 sides, grids = {}, {}
 for tag, root in (("new", args.new_root), ("old", args.old_root)):
-    q, grid = make_query(root)
+    q, grid = make_query(root, native_identity=(tag == "new"))
     vals = {}
     for (b, kvt) in truth:
         if kvt < 2 * b:
