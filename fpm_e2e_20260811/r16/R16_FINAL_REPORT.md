@@ -62,6 +62,43 @@ tp4 正式重采(前置已齐:gc-warmtp 镜像+A2 渲染,等用户点火)→ B1 
 批准)→ 上游 #1473/#1475 合并(等 maintainer)。挂账:GLM dep8 CUDA assert
 (OPEN_ISSUES 有复现入口)。
 
+### 0.6 现行采集的 KV 预热机制(prefill/decode 分述)
+
+核心差别一句话:**decode 的预热是"造一批真实内容的 KV 给它读",prefill 的
+预热是"喂真实文本给它算 + 预铺它要复用的前缀"。**
+
+**decode(kvwarm 主体)**——decode 步的本职是"读一大段 past-KV,生成
+1 个 token",故测量前池中必须真实存在该 KV 且内容为真(内容假则 MoE
+路由假,实测偏差 −8~−15%):
+
+1. 铺链:每个批量档开测前,用 ShareGPT(偶数池)真实文本跑分块 prefill
+   生成一组互异内容链,常驻 KV 池(独立登记不碰 benchmark 记账);链数与
+   深度由网格自动推导,逐档加深靠 prefix caching 增量续深(103 个批量档
+   仅需 ~1600 万 token prefill,不开缓存需 ~2.3 亿);
+2. 借表测量:测点 (B, kv总量) 发 B 个影子请求,1:1 借用链的块表(只读、
+   零分配、绕过 KV 管理器),跑两拍测量后倒带复原,点间零污染;
+3. 巨点中位:kv ≥100 万的点稳态步重复 3 次取中位;
+4. 如实回退:每档最深"顶格点"(池放不下链+余量)自动回退 fake 测量并
+   逐点标 `kvwarm_fake_fallback`(值不可信 ×2-3 虚高,下游按标排除,C1)。
+
+适用:MoE 拓扑(EP 系;08-20 起 pure_tp 放行=A1/gc-warmtp 镜像);dense
+跳过(无 expert,内容不敏感)。
+
+**prefill(两处内容保真)**——prefill 步本职是"算一段新 token",计算
+本身无需预造 KV,但两处内容必须为真:
+
+1. 被测请求输入:全零 token(时代①)→ 随机 token(时代②)→ 现为
+   ShareGPT 真实文本(240 万 token 扁平池,每请求确定性取窗,可复现);
+2. kv>0 坐标的前缀预铺:带"复用 KV"坐标的测点,先用真实内容把该前缀
+   实际 prefill 进 KV cache(靠 prefix caching 驻留),被测步读到的复用
+   KV 即真内容。
+
+外加两相同款的 5 轮 warmup 迭代(计时前常规热身)。
+
+**共用纪律**:内容池偶/奇分仓(采集偶数池、真值验证奇数池,零重叠);
+引擎必须开 prefix caching(链续深与前缀预铺的物理前提);每点测量制度
+(real_kv/fake_fallback/skip 原因)逐点入产物,B1 后进 parquet 列可审计。
+
 ## 一、对齐记分牌(全新真值,fpm_verify 独立套件)
 
 | cell | 判据 | R16 产品库 | r15 手工库(同真值) | 判定 |
