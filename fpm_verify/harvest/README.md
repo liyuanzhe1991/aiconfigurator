@@ -43,3 +43,12 @@ r15 实战工装收编。每拓扑一个自足 kit(tep4/dep4 逐字节保真,tp4
 
 ../scoring/score_decode.py 与 score_prefill_burst.py(参数化模型/系统/
 backend),判据见 ../../fpm_e2e_20260811/R16_ACCEPTANCE_SPEC.md §4。
+
+## 同机协议(2026-08-20 拍板,必须遵守)
+
+真值收割必须与被验采集**同一台物理机**:健康节点间小坐标测速离散 4-6%
+(时钟守卫盲区),跨机打分带 ±3-4% 地板,只作参考不作判定。操作:
+采集 cell 开跑时记下其 pod 的 spec.nodeName(aic 不记,自己记);
+收割用 `PIN_NODE=<node> bash stage_and_run.sh ...` 钉死同节点。
+stage_and_run 会把实际节点写进 /results/nodeName.txt 并打印 HARVEST-NODE。
+未设 PIN_NODE 会打警告并落随机节点。

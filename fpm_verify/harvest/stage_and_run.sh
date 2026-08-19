@@ -15,12 +15,24 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$TOPO"
 POD="fpm-l3-$TOPO-agg"
 K() { kubectl --context "$CTX" "$@"; }
 
-K apply -f "$DIR/k8s_deploy.yaml"
+# 同机协议:真值必须采在与采集同一台机器上(节点异质性实测 4-6%,
+# 时钟守卫盲区)。采集开跑时记下 cell pod 的 spec.nodeName,由
+# PIN_NODE 传入;不传则打醒目警告——跨机真值只作参考,不作判定。
+if [ -n "${PIN_NODE:-}" ]; then
+  sed "s|operator: NotIn|operator: In|; s|values: \[\"computeinstance-e01cywzf37n5mecwvv\"\]|values: [\"$PIN_NODE\"]|" \
+    "$DIR/k8s_deploy.yaml" | K apply -f -
+else
+  echo "WARN: PIN_NODE 未设——真值将落在随机节点,与采集跨机(±3-4% 地板),仅供参考口径" >&2
+  K apply -f "$DIR/k8s_deploy.yaml"
+fi
 for _ in $(seq 1 60); do
   [ "$(K get pod $POD -n $NS -o jsonpath='{.status.phase}' 2>/dev/null)" = "Running" ] && break
   sleep 10
 done
 [ "$(K get pod $POD -n $NS -o jsonpath='{.status.phase}' 2>/dev/null)" = "Running" ] || { echo "HARVEST-FAIL pod"; exit 1; }
+NODE="$(K get pod $POD -n $NS -o jsonpath='{.spec.nodeName}')"
+echo "HARVEST-NODE $NODE"
+K exec -n $NS $POD -- bash -c "echo $NODE > /results/nodeName.txt"
 
 K exec -n $NS $POD -- mkdir -p /tmp/fpm-serve
 # 环境守卫(方法论必选):锁频卡节点直接失败,换节点重建后再来
