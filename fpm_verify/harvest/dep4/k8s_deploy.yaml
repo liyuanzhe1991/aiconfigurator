@@ -29,6 +29,14 @@ spec:
     value: "true"
     effect: NoSchedule
   schedulerName: kai-scheduler
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: NotIn
+            values: ["computeinstance-e01cywzf37n5mecwvv"]
   securityContext:
     runAsUser: 0
     runAsGroup: 0

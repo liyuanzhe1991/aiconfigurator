@@ -23,6 +23,9 @@ done
 [ "$(K get pod $POD -n $NS -o jsonpath='{.status.phase}' 2>/dev/null)" = "Running" ] || { echo "HARVEST-FAIL pod"; exit 1; }
 
 K exec -n $NS $POD -- mkdir -p /tmp/fpm-serve
+# 环境守卫(方法论必选):锁频卡节点直接失败,换节点重建后再来
+K exec -i -n $NS $POD -- bash -c "cat > /tmp/clock_guard.sh" < "$(dirname "$DIR")/clock_guard.sh"
+K exec -n $NS $POD -- bash /tmp/clock_guard.sh || { echo "HARVEST-FAIL clock-guard(节点 $(K get pod $POD -n $NS -o jsonpath='{.spec.nodeName}'));拉黑该节点后重跑"; exit 9; }
 stage() {
   local ref got
   ref=$(shasum -a 256 "$1" | cut -d" " -f1)
