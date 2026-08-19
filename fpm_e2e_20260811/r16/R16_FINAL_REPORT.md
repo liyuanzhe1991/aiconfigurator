@@ -88,6 +88,13 @@ tep4 prefill **3.93% PASS**;dep4 prefill **4.62%**;dep4 decode **2.42%**
 
 外加两相同款的 5 轮 warmup 迭代(计时前常规热身)。
 
+
+**耗时侧注**:预热开销几乎全在 decode——铺链量 = 档数 × 网格深度
+(~1600 万 token,占 R16 战役总耗时 ~46%);prefill 的前缀预铺只覆盖
+kv 档位集合(~16 个档、最大 ~10 万 token,逐档一次全体共享),且预铺
+与被测同为 prefill 可顺带完成,输入内容替换本身零计算成本——故 prefill
+预热近乎免费。逐相耗时见 R16_RUNBOOK.md 耗时表。
+
 **共用纪律**:内容池偶/奇分仓(采集偶数池、真值验证奇数池,零重叠);
 引擎必须开 prefix caching(链续深与前缀预铺的物理前提);每点测量制度
 (real_kv/fake_fallback/skip 原因)逐点入产物,B1 后进 parquet 列可审计。
