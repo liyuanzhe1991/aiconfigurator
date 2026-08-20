@@ -55,8 +55,14 @@ spec:
       mountPath: /dev/shm
     name: fpm-resource
     resources:
+      requests:
+        nvidia.com/gpu: '2'
+        cpu: '32'
+        memory: 128Gi
       limits:
         nvidia.com/gpu: '2'
+        cpu: '32'
+        memory: 128Gi
     command:
     - /bin/bash
     - -lc
