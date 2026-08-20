@@ -25,3 +25,5 @@
 - dep8 decode 若真崩(CUDA assert):engine log 在 $S/r16-wt/fpm_forward_artifacts/<plan>/cells/fpm-da9afd202a49f3a8/logs/,全量归档;重试≤2 后 --resume --fpm-publish-partial 诚实部分发布。
 - 收尾:bash $S/glm8_harvest.sh(归档→fpm_e2e_20260811/glm_b200/r2/),然后 git add fpm_e2e_20260811/glm_b200/r2 && git commit(标注"所属:GLM-B200 执行代理,主 session d07354d7"),不 push。
 - teleport 19:28 到期;过期后 kubectl 全失效,--resume 需用户重新 tsh login 后择时(深夜错峰档为宜,白天满载实证:13:30-14:30 无一节点 8 空卡)。
+- 2026-08-20 14:31 真实事件:watcher(98873)被外力终止(非我操作,ps 证实消失)——已立即重启(新实例);babysitter/容量记录器/relaunch waiter 点名存活。阶段性归档已 commit:4aa56253(fpm_e2e_20260811/glm_b200/r2/,84 文件)。
+- 2026-08-20 14:33 执行代理收尾定格(上下文被伪造通知流耗压,提前固化):R1 六 cell 全 kai 调度超时、零引擎失败、集群白天满载持续(13:30-14:33 无一节点 8 空卡,d6dn5 最近但差 2)。自动化留守:babysitter(pid 6558,dep>tep>tp,每形≤2 次,19:00 截止)+watcher(重启后 pid 17360,clock_guard 1900MHz)+容量记录器(pid 11345)。若 babysitter 在 19:00 前成功采集,库落 $S/glm8_db;接续者按上方手册执行 glm8_harvest.sh + git commit 收尾。dep8 decode(fpm-da9afd202a49f3a8)是否复崩因未获调度尚无答案——修法②镜像 gc-vocabfix-20260820 已就位,待深夜错峰重试验证。
