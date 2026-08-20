@@ -40,6 +40,21 @@ def lines():
     except FileNotFoundError:
         return 0
 
+async def wait_route(s):
+    # 路由恢复等待:frontend 对已注册模型也会在 worker 心跳闪断时短暂 404
+    # (实测 burst 尾部巨长 prefill 后有闪断窗);小探针等到 200 再继续。
+    for _ in range(120):
+        try:
+            async with s.post(URL, json={"model": MODEL, "prompt": "hi",
+                                         "max_tokens": 1},
+                              timeout=aiohttp.ClientTimeout(total=30)) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+    return False
+
 async def post(s, ids, mt):
     async with s.post(URL, json={"model": MODEL, "prompt": ids, "max_tokens": mt,
                                  "ignore_eos": True},
@@ -72,7 +87,9 @@ async def pool(s, tag, C, isl, osl, rep):
     if total * (isl + osl) > CAP:
         print(f"[{tag} rep{rep}] 容量守卫跳过:{total}x({isl}+{osl}) > {CAP}", flush=True)
         return -1
-    for attempt in range(3):
+    waits = 0
+    attempt = 0
+    while attempt < 3:
         s0 = lines()
         blk_isl = max(8192, min(65536, total * 32))
         blockers = [asyncio.create_task(
@@ -87,6 +104,13 @@ async def pool(s, tag, C, isl, osl, rep):
         await asyncio.sleep(0.4)
         s1 = lines()
         ok = sum(1 for c in codes if c == 200)
+        if ok == 0 and waits < 2:
+            waits += 1
+            print(f"[{tag} rep{rep}] 全部非200(路由闪断?),等待恢复后重试", flush=True)
+            if not await wait_route(s):
+                print(f"[{tag} rep{rep}] 路由 10 分钟未恢复", flush=True)
+                break
+            continue
         if isl == 1:
             clean = blk_ok and entry_clean(s0, s1, total, isl)
             mark = "lockstep" if clean else "ragged"
@@ -98,6 +122,8 @@ async def pool(s, tag, C, isl, osl, rep):
             print(f"[{tag} rep{rep}] total={total} isl={isl}: {ok}/{total} {mark}", flush=True)
             return ok
         print(f"[{tag} rep{rep}] 进场参差,重试 {attempt+1}/3", flush=True)
+        attempt += 1
+        await asyncio.sleep(2)
     return 0
 
 async def main():
@@ -105,6 +131,9 @@ async def main():
     conn = aiohttp.TCPConnector(limit=0)
     dead = 0
     async with aiohttp.ClientSession(connector=conn) as s:
+        if not await wait_route(s):
+            print("DECODE-DRIVER-ABORT: 路由 10 分钟未就绪", flush=True)
+            sys.exit(7)
         for r in rows:
             reps = int(r.get("boots") or r.get("reps") or 1)
             for rep in range(reps):
