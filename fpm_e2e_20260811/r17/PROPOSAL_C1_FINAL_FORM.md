@@ -39,3 +39,15 @@
 - 零回归:网格内票逐位不变(tep4 同机滤后 4.17% 基准);
 - 上游四闸(public-api/doctests/codeowners/DCO)。
 - 验证脚本:同目录 tools_extrap_ab.py;数据:verify_samenode/*.csv.gz。
+
+## v3 增补(2026-08-20 晚,用户核对本意后的简化)
+
+own_curve_coverage_fallback 的设计本意 = 保护"孤儿站点"(一两个散点的残缺
+曲线)不自答远外推;实测 decode 三形(tp2/tp4/tep4)各 102 站点,曲线长度
+滤后最短 6 点、中位 10-15 点,**孤儿站点数 = 0**——该开关在 decode 上没有
+任何正当保护对象,只有误伤(b=128 借 b=2 案即其产物)。
+
+修法②最终形态(一行):fpm_decode_config 关闭 own_curve_coverage_fallback
+(decode 越界查询走自家曲线 util-hold 物理外推);fpm_prefill_config 保留
+该开关(prefill 站点为 (batch,kv) 二维对,存在真孤儿)。前沿豁免收紧(修法③)
+与打分工装接真 SOL(修法④)维持不变。
