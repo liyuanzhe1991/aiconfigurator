@@ -18,5 +18,9 @@ export L3_SHAREGPT_PATH=/workspace/model_cache/fpm_datasets/ShareGPT_V3_unfilter
 
 python3 /tmp/fpm-serve/burst_driver.py /tmp/fpm-serve/prefill_plan.csv /results/fpm_stream.jsonl /results/burst_windows.tsv 2>&1 | tee /results/burst_driver.log
 echo "T_burst_done=$(date +%s)" >> /results/l3_timing.log
+if [ "${L3_RUN_MIXED:-0}" = 1 ]; then
 bash /tmp/fpm-serve/phase_mixed.sh 2>&1 | tee /results/phase_mixed.log
+else
+  echo "MIXED-PHASE-SKIPPED (L3_RUN_MIXED!=1)"
+fi
 echo PREFILL-PHASE-DONE >> /results/phase_prefill.log

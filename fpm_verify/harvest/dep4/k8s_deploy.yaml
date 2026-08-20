@@ -49,7 +49,7 @@ spec:
       mountPath: /workspace/model_cache
     - name: model-cache
       mountPath: /results
-      subPath: _yuanli_l3_results/r16_dep4
+      subPath: _yuanli_l3_results/r17_dep4
     - name: dshm
       mountPath: /dev/shm
     name: fpm-resource
