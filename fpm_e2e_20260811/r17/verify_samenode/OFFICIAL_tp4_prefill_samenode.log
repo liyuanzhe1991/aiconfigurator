@@ -1,0 +1,14 @@
+Legacy perf-data layout (<backend>/<version>) found under /private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r17-systems/data/h200_sxm; migrate to <family>/<backend>/<version> (Collector V3 design §3)
+Legacy perf-data layout (<backend>/<version>) found under /private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r16-systems/data/h200_sxm; migrate to <family>/<backend>/<version> (Collector V3 design §3)
+prefill 真值坐标 112 个
+配对弃行(任一侧 None): 0 坐标
+
+===== tp4 prefill burst 层:同真值坐标三方对比 =====
+  old A n=   40  MAPE=  7.37%  P95= 18.82%  MAX= 22.99%
+  old B n=   44  MAPE=  9.72%  P95= 26.13%  MAX= 31.61%
+  old C n=   28  MAPE=  9.99%  P95= 22.79%  MAX= 45.18%
+  old 全 n=  112  MAPE=  8.95%  P95= 22.96%
+  new A n=   40  MAPE=  7.52%  P95= 19.09%  MAX= 23.01%
+  new B n=   44  MAPE=  9.94%  P95= 26.71%  MAX= 29.93%
+  new C n=   28  MAPE=  9.77%  P95= 22.01%  MAX= 49.68%
+  new 全 n=  112  MAPE=  9.03%  P95= 22.64%
