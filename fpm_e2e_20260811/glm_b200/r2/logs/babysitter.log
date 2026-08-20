@@ -1,1 +1,6 @@
 2026-08-20 13:52:25 babysitter start(队列 dep>tep>tp,每形限重发2次,19:00 截止)
+2026-08-20 14:53:00 babysitter start(队列 dep>tep>tp,每形限重发2次,19:00 截止)
+2026-08-20 15:34:45 RELAUNCH dep(第 1 次重发)→ 空位节点 cluster-0967a26d-pool-14bee067-prctr-rxczf,log=glm8_dep_r2.log
+2026-08-20 15:40:53 RELAUNCH dep(第 1 次重发)→ 空位节点 cluster-0967a26d-pool-14bee067-prctr-rxczf,log=glm8_dep_r2.log
+2026-08-20 15:54:12 babysitter start(队列 dep>tep>tp,每形限重发2次,19:00 截止)
+2026-08-20 16:54:39 babysitter start(队列 dep>tep>tp,每形限重发2次,19:00 截止)
