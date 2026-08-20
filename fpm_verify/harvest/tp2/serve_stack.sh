@@ -35,8 +35,17 @@ ENGINE_PID=$!
 echo "stack up: etcd+nats+frontend+listener+engine(pid=$ENGINE_PID); waiting for model ready"
 for i in $(seq 1 120); do
   if curl -sf http://127.0.0.1:8000/v1/models 2>/dev/null | grep -q MiniMax; then
-    echo "ENGINE-READY after ${i}0s"
-    exit 0
+    # 模型入列表不等于路由可用(worker 实例注册有滞后窗口,期间 completions 404)
+    # ——必须真打一条 completions 探针等 200 才算就绪
+    for j in $(seq 1 60); do
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:8000/v1/completions         -H "Content-Type: application/json"         -d "{\"model\":\"MiniMaxAI/MiniMax-M2.7\",\"prompt\":\"hi\",\"max_tokens\":1}")
+      if [ "$CODE" = "200" ]; then
+        echo "ENGINE-READY after ${i}0s (+completions probe ${j}0s)"
+        exit 0
+      fi
+      sleep 10
+    done
+    echo "COMPLETIONS-PROBE-TIMEOUT (模型已入列表但路由 10 分钟未通)"; exit 1
   fi
   kill -0 $ENGINE_PID 2>/dev/null || { echo "ENGINE-DIED"; tail -20 /results/engine.log; exit 1; }
   sleep 10
