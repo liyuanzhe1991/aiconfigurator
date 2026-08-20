@@ -16,7 +16,7 @@ from aiconfigurator_core.sdk import perf_database
 from aiconfigurator_core.sdk.operations.fpm_forward import FPMForwardOp
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--topo", choices=["tep4", "dep4", "tp4"], required=True)
+ap.add_argument("--topo", choices=["tep4", "dep4", "tp4", "tep2", "dep2", "tp2"], required=True)
 ap.add_argument("--stream", required=True)
 ap.add_argument("--windows", required=True)
 ap.add_argument("--new-root", required=True)
@@ -27,15 +27,17 @@ ap.add_argument("--system", default="h200_sxm")
 ap.add_argument("--backend", default="vllm")
 ap.add_argument("--backend-version", default="0.25.1")
 args = ap.parse_args()
-DP = 4 if args.topo == "dep4" else 1
+TOPO_P = {"tep4": (4, 1, 1, 4), "dep4": (4, 4, 1, 4), "tp4": (4, 1, 4, 1),
+          "tep2": (2, 1, 1, 2), "dep2": (2, 2, 1, 2), "tp2": (2, 1, 2, 1)}
+TP_S, DP, MOE_TP, MOE_EP = TOPO_P[args.topo]
 
 def make_query(root, native_identity=False):
     perf_database.set_systems_paths([root])
     db = perf_database.get_database(args.system, args.backend, args.backend_version)
     FPMForwardOp.clear_cache()
     cfg = sdk_config.ModelConfig(
-        tp_size=(1 if (native_identity and args.topo=='dep4') else 4), pp_size=1, attention_dp_size=(4 if (native_identity and args.topo=='dep4') else 1),
-        moe_tp_size=(4 if args.topo=='tp4' else 1), moe_ep_size=(1 if args.topo=='tp4' else 4), cp_size=1,
+        tp_size=(1 if (native_identity and args.topo in ('dep4','dep2')) else TP_S), pp_size=1, attention_dp_size=(DP if (native_identity and args.topo in ('dep4','dep2')) else 1),
+        moe_tp_size=MOE_TP, moe_ep_size=MOE_EP, cp_size=1,
         gemm_quant_mode=common.GEMMQuantMode.fp8_block,
         moe_quant_mode=common.MoEQuantMode.fp8_block,
         fmha_quant_mode=common.FMHAQuantMode.bfloat16,

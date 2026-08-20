@@ -20,7 +20,7 @@ from aiconfigurator_core.sdk import perf_database
 from aiconfigurator_core.sdk.operations.fpm_forward import FPMForwardOp
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--topo", choices=["tep4", "dep4", "tp4"], required=True)
+ap.add_argument("--topo", choices=["tep4", "dep4", "tp4", "tep2", "dep2", "tp2"], required=True)
 ap.add_argument("--stream", required=True, nargs="+")
 ap.add_argument("--windows", required=True, nargs="+")
 ap.add_argument("--new-root", required=True)
@@ -33,9 +33,10 @@ ap.add_argument("--backend-version", default="0.25.1")
 args = ap.parse_args()
 assert len(args.stream) == len(args.windows), "stream/windows 必须成对给"
 
-DP = 4 if args.topo == "dep4" else 1
-MOE_TP = 4 if args.topo == "tp4" else 1
-MOE_EP = 1 if args.topo == "tp4" else 4
+# 形参数表:tp_size/dp/moe_tp/moe_ep(2 卡形 2026-08-20 扩展)
+TOPO_P = {"tep4": (4, 1, 1, 4), "dep4": (4, 4, 1, 4), "tp4": (4, 1, 4, 1),
+          "tep2": (2, 1, 1, 2), "dep2": (2, 2, 1, 2), "tp2": (2, 1, 2, 1)}
+TP_S, DP, MOE_TP, MOE_EP = TOPO_P[args.topo]
 
 def make_query(root, native_identity=False):
     # 身份口径:r15 手工库把 dep4 发布为 tp4 形(先例:score_l3_dp.py);
@@ -44,10 +45,10 @@ def make_query(root, native_identity=False):
     perf_database.set_systems_paths([root])
     db = perf_database.get_database(args.system, args.backend, args.backend_version)
     FPMForwardOp.clear_cache()
-    if native_identity and args.topo == "dep4":
-        tp_s, adp_s = 1, 4
+    if native_identity and args.topo in ("dep4", "dep2"):
+        tp_s, adp_s = 1, DP
     else:
-        tp_s, adp_s = 4, 1
+        tp_s, adp_s = TP_S, 1
     cfg = sdk_config.ModelConfig(
         tp_size=tp_s, pp_size=1, attention_dp_size=adp_s,
         moe_tp_size=MOE_TP, moe_ep_size=MOE_EP, cp_size=1,
