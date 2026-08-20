@@ -1,0 +1,183 @@
+{
+  "BenchConfig": {
+    "concurrency": [
+      1,
+      2,
+      4,
+      8,
+      32,
+      64,
+      128,
+      256
+    ],
+    "endpoint_type": "chat",
+    "endpoint_url": "http://dynamo-agg-frontend.yuanli-aic.svc.cluster.local:8000",
+    "image": "python:3.12-slim",
+    "image_batch_size": 0,
+    "isl": 4000,
+    "isl_stddev": 0,
+    "model": "zai-org/GLM-5.2-FP8",
+    "name": "dynamo-agg-benchmark",
+    "num_requests": [
+      50,
+      100,
+      200,
+      400,
+      1600,
+      3200,
+      6400,
+      12800
+    ],
+    "osl": 1000,
+    "osl_stddev": 0,
+    "prefix_prompt_pool_size": 1,
+    "profile_start_timeout": 400,
+    "tokenizer": "/workspace/model_cache/hub/models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541",
+    "ui": "simple"
+  },
+  "DynConfig": {
+    "enable_router": false,
+    "mode": "agg"
+  },
+  "K8sConfig": {
+    "agg_engine_args": "/workspace/engine_configs/agg_config.yaml",
+    "decode_engine_args": "/workspace/engine_configs/decode_config.yaml",
+    "extra_env": [
+      {
+        "name": "DYN_BENCH_PREFILL_CONTENT",
+        "value": "sharegpt"
+      },
+      {
+        "name": "DYN_FPM_BENCHMARK_OUTPUT_PATH",
+        "value": "/results/benchmark.json"
+      },
+      {
+        "name": "FPM_RUN_ID",
+        "value": "fpm-42f9ce0136ced72f"
+      }
+    ],
+    "fpm_orchestrator": "lws",
+    "fpm_resource_labels": {
+      "aiconfigurator.nvidia.com/cell": "fpm-42f9ce0136ced72f",
+      "aiconfigurator.nvidia.com/owned-by": "fpm-forward-collector",
+      "aiconfigurator.nvidia.com/plan": "7ec92e9f50f61cd0",
+      "kai.scheduler/queue": "dynamo"
+    },
+    "k8s_engine_mode": null,
+    "k8s_etcd_endpoints": null,
+    "k8s_hf_home": "/workspace/model_cache/hub/models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541",
+    "k8s_image": "nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-timing-20260818",
+    "k8s_image_pull_secret": "nvcr-push-secret",
+    "k8s_model_cache": "shared-model-cache",
+    "k8s_model_path_in_pvc": "hub/models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541",
+    "k8s_namespace": "yuanli-aic",
+    "k8s_planner_image": null,
+    "k8s_pvc_mount_path": "/workspace/model_cache",
+    "k8s_pvc_name": "shared-model-cache",
+    "name": "fpm-42f9ce0136ced72f-agg",
+    "name_prefix": "fpm-42f9ce0136ced72f",
+    "prefill_engine_args": "/workspace/engine_configs/prefill_config.yaml",
+    "system_name": "b200_sxm",
+    "transport": null,
+    "use_engine_cm": false,
+    "worker_extra_pod_spec": {
+      "affinity": {
+        "nodeAffinity": {
+          "requiredDuringSchedulingIgnoredDuringExecution": {
+            "nodeSelectorTerms": [
+              {
+                "matchExpressions": [
+                  {
+                    "key": "kubernetes.io/hostname",
+                    "operator": "NotIn",
+                    "values": [
+                      "cluster-0967a26d-pool-14bee067-prctr-xmhbj",
+                      "cluster-0967a26d-pool-14bee067-prctr-7wrxm"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "schedulerName": "kai-scheduler",
+      "securityContext": {
+        "runAsGroup": 0,
+        "runAsUser": 0
+      }
+    }
+  },
+  "ModelConfig": {
+    "fits_in_memory": false,
+    "is_moe": true,
+    "required_tp": 16
+  },
+  "NodeConfig": {
+    "num_gpus_per_node": 8,
+    "system_name": "b200_sxm"
+  },
+  "ServiceConfig": {
+    "dyn_vllm_kv_event_port": 20081,
+    "head_node_ip": "0.0.0.0",
+    "hf_token": null,
+    "include_frontend": false,
+    "model_name": "zai-org/GLM-5.2-FP8",
+    "model_path": "/workspace/model_cache/hub/models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541",
+    "port": 8000,
+    "served_model_name": "zai-org/GLM-5.2-FP8",
+    "served_model_path": "/workspace/model_cache/hub/models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541",
+    "vllm_nixl_side_channel_port": 20097
+  },
+  "SflowConfig": {
+    "aiperf_image": "python:3.12-slim",
+    "dynamo_image": null,
+    "extra_frontend_args": null,
+    "slurm_account": null,
+    "slurm_partition": null,
+    "slurm_timelimit": 120,
+    "variable_profile": null
+  },
+  "SlaConfig": {
+    "isl": 4000,
+    "osl": 1000
+  },
+  "WorkerConfig": {
+    "agg_gpus_per_worker": 8,
+    "agg_workers": 1,
+    "decode_gpus_per_worker": null,
+    "decode_workers": 1,
+    "prefill_gpus_per_worker": null,
+    "prefill_workers": 1
+  },
+  "backend": "vllm",
+  "params": {
+    "agg": {
+      "data_parallel_size": 1,
+      "extra_cli_args": [
+        "--distributed-executor-backend",
+        "mp",
+        "--distributed-timeout-seconds",
+        "1800",
+        "--no-enable-log-requests",
+        "--trust-remote-code",
+        "--reasoning-parser=glm45",
+        "--benchmark-timeout",
+        "10800",
+        "--benchmark-mode",
+        "decode",
+        "--benchmark-warmup-iterations",
+        "5",
+        "--max-model-len",
+        "-1"
+      ],
+      "gpus_per_worker": 8,
+      "kv_cache_dtype": "fp8",
+      "moe_expert_parallel_size": 8,
+      "moe_tensor_parallel_size": 1,
+      "pipeline_parallel_size": 1,
+      "tensor_parallel_size": 8
+    }
+  },
+  "preserve_engine_limits": true
+}

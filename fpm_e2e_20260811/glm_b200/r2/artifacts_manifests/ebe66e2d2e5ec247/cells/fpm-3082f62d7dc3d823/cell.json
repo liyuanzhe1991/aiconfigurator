@@ -1,0 +1,36 @@
+{
+  "backend_policy": {
+    "admission_reason": "AIC automatic baseline for the selected model/backend",
+    "aic_fields": {
+      "attention_backend": null,
+      "enable_eplb": false,
+      "enable_wideep": false,
+      "moe_backend": null
+    },
+    "expected_markers": {},
+    "generator_overrides": {},
+    "policy_id": "baseline_auto"
+  },
+  "cell_id": "fpm-3082f62d7dc3d823",
+  "kv_cache_dtype": "fp8",
+  "parallel_strategy": "tep",
+  "point_source": "dynamo_native_self_benchmark",
+  "resolved_dtypes": {
+    "comm_quant_mode": "half",
+    "fmha_quant_mode": "fp8",
+    "fmha_resolution": "checkpoint_native",
+    "gemm_quant_mode": "fp8_block",
+    "kvcache_quant_mode": "fp8",
+    "moe_quant_mode": "fp8_block"
+  },
+  "topology": {
+    "cp": 1,
+    "dp": 1,
+    "moe_ep": 8,
+    "moe_tp": 1,
+    "pp": 1,
+    "tp": 8
+  },
+  "weight_quantization": "fp8_block",
+  "workload_kind": "prefill"
+}

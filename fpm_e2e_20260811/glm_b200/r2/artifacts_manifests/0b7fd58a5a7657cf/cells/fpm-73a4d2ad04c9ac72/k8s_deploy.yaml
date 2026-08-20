@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fpm-73a4d2ad04c9ac72-agg
+  labels:
+    app.kubernetes.io/name: fpm-73a4d2ad04c9ac72-agg
+    app.kubernetes.io/component: fpm-resource
+    kai.scheduler/queue: dynamo
+    aiconfigurator.nvidia.com/owned-by: fpm-forward-collector
+    aiconfigurator.nvidia.com/plan: 0b7fd58a5a7657cf
+    aiconfigurator.nvidia.com/cell: fpm-73a4d2ad04c9ac72
+  namespace: yuanli-aic
+spec:
+  volumes:
+  - name: model-cache
+    persistentVolumeClaim:
+      claimName: shared-model-cache
+  - name: results
+    emptyDir: {}
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 64Gi
+  imagePullSecrets:
+  - name: nvcr-push-secret
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-B200
+  tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  schedulerName: kai-scheduler
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: NotIn
+            values:
+            - cluster-0967a26d-pool-14bee067-prctr-7wrxm
+            - cluster-0967a26d-pool-14bee067-prctr-xmhbj
+  containers:
+  - image: nvcr.io/0980761089281446/dynamo-fpm-frozen:gc-vocabfix-20260820
+    workingDir: /workspace/examples/backends/vllm
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - name: model-cache
+      mountPath: /workspace/model_cache
+    - name: results
+      mountPath: /results
+    - name: dshm
+      mountPath: /dev/shm
+    name: fpm-resource
+    resources:
+      limits:
+        nvidia.com/gpu: '8'
+        cpu: '112'
+        memory: 512Gi
+      requests:
+        cpu: '112'
+        memory: 512Gi
+    command:
+    - /bin/bash
+    - -lc
+    args:
+    - exec sleep infinity
+  restartPolicy: Always

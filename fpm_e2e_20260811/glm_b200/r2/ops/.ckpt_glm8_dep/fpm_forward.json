@@ -1,0 +1,36 @@
+{
+  "cells": {
+    "fpm-da9afd202a49f3a8": {
+      "artifact_dir": "/private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r16-wt/fpm_forward_artifacts/87aa47129a6f8254/cells/fpm-da9afd202a49f3a8",
+      "attempt_id": "93d1228f2ff64f3c88bce0dd9755f438",
+      "completed_at": "2026-08-20T06:01:45.528999+00:00",
+      "decode_prefix_caching": "disabled",
+      "duration_seconds": 932.137,
+      "error": "timed out waiting for 1 FPM pods for fpm-da9afd202a49f3a8-agg",
+      "error_type": "TimeoutError",
+      "global_warmup_iterations": 5,
+      "point_source": "dynamo_native_self_benchmark",
+      "started_at": "2026-08-20T05:46:13.399811+00:00",
+      "status": "failed",
+      "total_gpus": 8
+    },
+    "fpm-f9684b20a2027ea5": {
+      "artifact_dir": "/private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r16-wt/fpm_forward_artifacts/87aa47129a6f8254/cells/fpm-f9684b20a2027ea5",
+      "attempt_id": "32c473f1c4564ab49304ea8411ca2812",
+      "completed_at": "2026-08-20T05:46:13.397791+00:00",
+      "duration_seconds": 925.944,
+      "error": "timed out waiting for 1 FPM pods for fpm-f9684b20a2027ea5-agg",
+      "error_type": "TimeoutError",
+      "global_warmup_iterations": 5,
+      "point_source": "dynamo_native_self_benchmark",
+      "prefill_cudagraph_capture_size_count": 99,
+      "prefill_max_new_token_samples": 199,
+      "prefill_requested_new_token_axis_count": 199,
+      "started_at": "2026-08-20T05:30:47.459513+00:00",
+      "status": "failed",
+      "total_gpus": 8
+    }
+  },
+  "plan_sha256": "87aa47129a6f8254582f7b81bb28839960dca2e7a868f602dd2968fb7ddd5234",
+  "schema": "aic-fpm-collector-checkpoint-v3"
+}
