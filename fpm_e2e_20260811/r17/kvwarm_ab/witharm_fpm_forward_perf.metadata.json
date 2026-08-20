@@ -1,0 +1,32 @@
+{
+  "aic_revision": "f2a2b61bb2443e399c93b95e9894f0f19be82b92",
+  "backend": "vllm",
+  "backend_version": "0.25.1",
+  "collector_attempt_ids": [
+    "e22e4b9b16564713819d5182338e0ac9",
+    "e97834540bfa43b7bc438ce43836a2db"
+  ],
+  "coordinate_system": "iteration_totals_balanced_v1",
+  "measurement_policy": "dynamo_native_single_sample_v1",
+  "measurement_repeats": 1,
+  "model_paths": [
+    "MiniMaxAI/MiniMax-M2.7"
+  ],
+  "parquet_sha256": "e8e237f5ddefc92337ef8b829a9ebcf4cdf09037ffe6b58cee1a4d435fc78a0e",
+  "row_count": 11062,
+  "runtime_grid_digests": [
+    "513534075a1adaefd9bf0a47f861ece7f8949dce5981be236d544786c91972e3",
+    "c8d342ce1997ac9e48be0d296c78ed7fcafb3732079c54a21824f12047c47dae"
+  ],
+  "runtime_run_ids": [
+    "21473399509f428bac7fc27b94e90fed",
+    "830cad558f224feaae0e151e00034573"
+  ],
+  "schema_name": "aic_fpm_forward_perf",
+  "schema_version": 6,
+  "source_plan_sha256": [
+    "482f15d9e1b28d61e034040966c738a41635497793534fbfd79c1e9a6a2e3fc6"
+  ],
+  "system": "h200_sxm",
+  "warmup_repeats": 0
+}
