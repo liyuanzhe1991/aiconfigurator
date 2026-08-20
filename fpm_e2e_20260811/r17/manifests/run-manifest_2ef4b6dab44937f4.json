@@ -1,0 +1,71 @@
+{
+  "cells": {
+    "fpm-947eff015e9514d1": {
+      "cell_total_s": 2249.544,
+      "collector_phase_seconds": {
+        "collect_s": 50.365,
+        "execute_wall_s": 2124.036,
+        "render_s": 0.06,
+        "schedule_s": 6.459,
+        "stage_s": 24.796
+      },
+      "engine_phase_seconds": {
+        "engine_launch_s": null,
+        "inference_s": 1277.576397381723,
+        "kvwarm_warmup_s": null,
+        "note": "pending dynamo-fpm phase instrumentation; interface per R16 \u00a73",
+        "seeding_s": null
+      },
+      "engine_timing": {
+        "benchmark_elapsed_seconds": 1693.9246203750372,
+        "measured_iteration_seconds": 1277.576397381723
+      },
+      "status": "passed",
+      "topology": {
+        "cp": 1,
+        "dp": 4,
+        "moe_ep": 4,
+        "moe_tp": 1,
+        "pp": 1,
+        "tp": 1
+      },
+      "workload_kind": "prefill"
+    },
+    "fpm-c19369ef6ddd8012": {
+      "cell_total_s": 3226.226,
+      "collector_phase_seconds": {
+        "collect_s": 46.937,
+        "execute_wall_s": 3113.656,
+        "render_s": 0.03,
+        "schedule_s": 0.854,
+        "stage_s": 25.35
+      },
+      "engine_phase_seconds": {
+        "engine_launch_s": null,
+        "inference_s": 64.03252139501274,
+        "kvwarm_warmup_s": null,
+        "note": "pending dynamo-fpm phase instrumentation; interface per R16 \u00a73",
+        "seeding_s": null
+      },
+      "engine_timing": {
+        "benchmark_elapsed_seconds": 2778.9962393213063,
+        "measured_iteration_seconds": 64.03252139501274
+      },
+      "status": "passed",
+      "topology": {
+        "cp": 1,
+        "dp": 4,
+        "moe_ep": 4,
+        "moe_tp": 1,
+        "pp": 1,
+        "tp": 1
+      },
+      "workload_kind": "decode"
+    }
+  },
+  "plan_sha256": "2ef4b6dab44937f4b36b8411dc7a37d000953016ab0cb600208f019c3df4215f",
+  "run_total_s": 5475.77,
+  "schema_name": "aic_fpm_run_manifest",
+  "schema_version": 1,
+  "smoke": false
+}
