@@ -1,0 +1,15 @@
+Legacy perf-data layout (<backend>/<version>) found under /private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r17-systems/data/h200_sxm; migrate to <family>/<backend>/<version> (Collector V3 design §3)
+真值坐标 60555 个(score-what-forms);弃窗(rank步数差)=0 wall近等违例步=0
+fpm_forward: replaced 605 fake_fallback value(s) with in-site extrapolation from /private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r17-systems/data/h200_sxm/vllm/0.25.1/fpm_forward_perf.parquet
+fpm_forward: replaced 605 fake_fallback value(s) with in-site extrapolation from /private/tmp/claude-501/-Users-yuanzhe-Desktop-codex-workspace-fpm-worktrees-aic-collector-generator-decoupling/d07354d7-72f0-47a1-aeab-be8fd346e942/scratchpad/r17-systems/data/h200_sxm/vllm/0.25.1/fpm_forward_perf.parquet
+配对弃行(任一侧 None): 28 坐标
+
+===== tp2 decode 层:同真值坐标三方对比 =====
+  old A n=  100  MAPE=  7.44%  P95= 22.76%  MAX= 99.57%
+  old B n=60414  MAPE=  3.33%  P95=  8.71%  MAX=238.06%
+  old F n=   13  MAPE= 42.18%  P95= 88.40%  MAX= 97.57%
+  old 全 n=60527  MAPE=  3.35%  P95=  8.72%
+  new A n=  100  MAPE=  7.44%  P95= 22.76%  MAX= 99.57%
+  new B n=60414  MAPE=  3.33%  P95=  8.71%  MAX=238.06%
+  new F n=   13  MAPE= 42.18%  P95= 88.40%  MAX= 97.57%
+  new 全 n=60527  MAPE=  3.35%  P95=  8.72%

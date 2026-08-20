@@ -320,6 +320,42 @@ def load_fpm_forward_data(primary_path: str, expected_version: str, expected_sys
     # Opt-in trust gate (experiment): rows measured under the kvwarm
     # fake-fallback regime are excluded from modeling. Rows lacking the
     # column (legacy libraries) and topology-level skips ("skip:*") pass.
+    # v5 终案(2026-08-20 用户拍板):fake 值站内外插替换,不删行。
+    # 同站点(identity+batch)末两个 real 行线性外推覆写 latency;
+    # 行/坐标/网格零改动,parquet 原始记录不动(此处仅内存视图)。
+    if os.environ.get("FPM_REPLACE_FAKE_EXTRAP") == "1":
+        _key_cols = ("model_path", "system", "backend", "backend_version",
+                     "tp", "pp", "dp", "moe_tp", "moe_ep", "cp",
+                     "moe_backend", "attention_backend", "gemm_quant_mode",
+                     "moe_quant_mode", "kv_cache_dtype", "workload_kind",
+                     "batch_size")
+        _groups = {}
+        for r in rows:
+            if r.get("workload_kind") != "decode":
+                continue
+            _groups.setdefault(tuple(r.get(c) for c in _key_cols), []).append(r)
+        _replaced = 0
+        for _g in _groups.values():
+            _reals = sorted((r for r in _g if r.get("kv_seed_regime") == "real_kv"),
+                            key=lambda r: r["total_kv_read_tokens"])
+            if len(_reals) < 2:
+                continue
+            for r in _g:
+                if r.get("kv_seed_regime") != "fake_fallback":
+                    continue
+                _below = [x for x in _reals
+                          if x["total_kv_read_tokens"] < r["total_kv_read_tokens"]]
+                if len(_below) < 2:
+                    continue
+                r1, r2 = _below[-2], _below[-1]
+                _slope = ((r2["latency_ms"] - r1["latency_ms"])
+                          / (r2["total_kv_read_tokens"] - r1["total_kv_read_tokens"]))
+                r["latency_ms"] = (r2["latency_ms"]
+                                   + (r["total_kv_read_tokens"] - r2["total_kv_read_tokens"]) * _slope)
+                _replaced += 1
+        if _replaced:
+            print(f"fpm_forward: replaced {_replaced} fake_fallback value(s) "
+                  f"with in-site extrapolation from {primary_path}")
     if os.environ.get("FPM_EXCLUDE_FAKE_FALLBACK") == "1":
         kept = [r for r in rows if r.get("kv_seed_regime") != "fake_fallback"]
         if len(kept) != len(rows):
