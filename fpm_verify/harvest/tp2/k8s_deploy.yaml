@@ -6,6 +6,7 @@ metadata:
     app.kubernetes.io/name: fpm-l3-tp2-agg
     app.kubernetes.io/component: fpm-resource
     kai.scheduler/queue: dynamo
+    admission.datadoghq.com/enabled: "false"
     aiconfigurator.nvidia.com/owned-by: fpm-forward-collector
     aiconfigurator.nvidia.com/plan: a70dcfbf9d719a3a
     aiconfigurator.nvidia.com/cell: fpm-l3-tp2
