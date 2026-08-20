@@ -65,3 +65,23 @@ own_curve_coverage_fallback 的设计本意 = 保护"孤儿站点"(一两个散�
 4. decode 配置关闭 own_curve_coverage_fallback(v3 结论,孤儿站点=0);
    prefill 保留;前沿豁免收紧与打分工装接真 SOL 维持。
 语义即用户原始意图:"值不可信、坐标可信"。
+
+## v5 终案(2026-08-20 晚,用户拍板:值替换,不删行)
+
+**设计**:装载时(modeling 侧,parquet 原始记录不动)对 kv_seed_regime ==
+"fake_fallback" 的 decode 行做**站内值替换**——用同站点(同 batch 档)末两个
+real 行线性外推到该行坐标,覆写 latency_ms(内存中);行、坐标、网格、域闸、
+查询路径全部原封不动。审计链保留:parquet 永远存原始 fake 测量+标记,替换
+只发生在装载后的内存视图。
+- 站内 real 行 <2 时保持原值并告警(实测 decode 三形零此例);
+- prefill(n/a)不动;
+- 留 env 逃生开关(用原始 fake 值,对照用);
+- own_curve_coverage_fallback 之争就此绕开(该带曲线满值覆盖,不触发);
+  前沿豁免收紧与打分工装接真 SOL 降级为独立卫生项,不阻塞本案。
+
+**验收**:①b=128/kv=131200 回归例:替换后顶格值 ≈44.5ms,查询答 ≈41.5ms
+(真值 41.69),禁 9.78 禁拒答;②5,524 票同机 A/B:带内 MAPE 对标线性基准
+(tep4 2.34 / tp4 0.34 / tp2 2.71);③网格内票零回归;④上游四闸。
+
+**实现落点**:Rust 装载器(基于 fpm-exclude-fake-fallback 分支改造,开新 PR);
+Python 打分工装同步实现同款语义(主 session 自理,用于持续验证)。
